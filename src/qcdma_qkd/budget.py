@@ -156,7 +156,12 @@ def round_budget_from_rate(key_rate_bps: float, round_seconds: float,
 def net_rate_bits_per_second(key_rate_bps: float, n_symbols: int,
                              i_ab_bits_per_symbol: float, cfg: BudgetConfig,
                              symbol_rate: float, **kw) -> dict:
-    """Application rate after paying auth and seed for one round."""
+    """Application rate after paying auth and seed for one round.
+
+    ``symbol_rate`` is the **per-user** symbol rate, ``chip_rate / L`` -- see
+    ``CDMAConfig.symbol_rate()``.  ``key_rate_bps`` must therefore already be a
+    per-user figure (``S_pos * symbol_rate``).
+    """
     round_seconds = n_symbols / symbol_rate
     b = round_budget(key_rate_bps * round_seconds, n_symbols,
                      i_ab_bits_per_symbol, cfg, **kw)
@@ -166,7 +171,7 @@ def net_rate_bits_per_second(key_rate_bps: float, n_symbols: int,
 
 def min_key_rate_bps(n_symbols: int, i_ab_bits_per_symbol: float,
                      cfg: BudgetConfig, symbol_rate: float, **kw) -> float:
-    """Raw QKD rate below which u_n < 0 (the loop runs at a loss)."""
+    """Raw per-user QKD rate below which u_n < 0 (the loop runs at a loss)."""
     a = round_auth_bits(n_symbols, i_ab_bits_per_symbol, cfg, **kw)
     return float((a + cfg.seed_bits) * symbol_rate / n_symbols)
 
@@ -228,8 +233,11 @@ def frames_per_seed(L: int, symbol_rate: float, frame_seconds: float,
                     prf_throughput_bps: float | None = None) -> float:
     """Frames of the *same* round one seed can cover.
 
-    PRF expansion is computationally bounded, not key-bounded, so this is
-    limited by throughput (if given) rather than by the key budget.
+    ``symbol_rate`` is per-user (``chip_rate / L``); the product ``L *
+    symbol_rate`` recovers the hardware chip rate, so ``chips_per_frame`` is
+    correct for either convention.  PRF expansion is computationally bounded,
+    not key-bounded, so this is limited by throughput (if given) rather than by
+    the key budget.
     """
     chips_per_frame = L * frame_seconds * symbol_rate
     if prf_throughput_bps is None:

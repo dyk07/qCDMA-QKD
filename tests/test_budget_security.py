@@ -63,9 +63,11 @@ def test_round_budget_sums_to_key():
 
 def test_budget_feasibility_threshold():
     cfg = BudgetConfig()
-    need = budget.min_key_rate_bps(10 ** 8, 0.3, cfg, symbol_rate=1e9)
+    cdma = CDMAConfig()
+    sym_rate = cdma.symbol_rate()          # per-user: chip_rate / L
+    need = budget.min_key_rate_bps(10 ** 8, 0.3, cfg, symbol_rate=sym_rate)
     below = budget.round_budget(need * 0.9 * 0.1, 10 ** 8, 0.3, cfg)
-    above = budget.round_budget((need * 1.5) * (10 ** 8 / 1e9), 10 ** 8, 0.3, cfg)
+    above = budget.round_budget(need * 1.5 * (10 ** 8 / sym_rate), 10 ** 8, 0.3, cfg)
     assert not below["feasible"]
     assert above["feasible"]
 

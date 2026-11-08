@@ -741,6 +741,7 @@
       "max_known_chips": 128.0,
       "known_chips_at_fmin": 128.0,
       "feasible": true,
+      "binds": true,
       "note": "extractor: known chips must not exhaust the seed"
     },
     "256": {
@@ -752,6 +753,7 @@
       "max_known_chips": 256.0,
       "known_chips_at_fmin": 256.0,
       "feasible": true,
+      "binds": true,
       "note": "extractor: known chips must not exhaust the seed"
     },
     "512": {
@@ -763,6 +765,7 @@
       "max_known_chips": 512.0,
       "known_chips_at_fmin": 512.0,
       "feasible": true,
+      "binds": true,
       "note": "extractor: known chips must not exhaust the seed"
     }
   },
@@ -782,7 +785,7 @@
   ],
   "f_min_map": [
     [
-      1.0,
+      0.0,
       0.5,
       0.75,
       0.875,
@@ -790,26 +793,26 @@
       0.96875
     ],
     [
-      1.0,
-      1.0,
+      0.0,
+      0.0,
       0.5,
       0.75,
       0.875,
       0.9375
     ],
     [
-      1.0,
-      1.0,
-      1.0,
+      0.0,
+      0.0,
+      0.0,
       0.5,
       0.75,
       0.875
     ],
     [
-      1.0,
-      1.0,
-      1.0,
-      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
       0.5,
       0.75
     ]

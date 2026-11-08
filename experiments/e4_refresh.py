@@ -60,13 +60,13 @@ def main() -> dict:
     fig.subplots_adjust(wspace=0.42)
 
     ax = axes[0]
-    # shade only the strictest constraint so the plot does not turn muddy
-    ax.axvspan(0.0, max(constraint[s]["f_min"] for s in seeds),
-               color="#c0392b", alpha=0.08,
-               label="seed fully exposed")
     for s, c in zip(seeds, ("#c0392b", "#2471a3", "#1e8449")):
         ax.plot(f_grid, h[s], color=c, label=f"seed {s} bit")
         ax.axvline(constraint[s]["f_min"], color=c, ls=":", lw=1)
+    # shade only the region where *every* seed is exposed
+    ax.axvspan(0.0, min(constraint[s]["f_min"] for s in seeds),
+               color="#c0392b", alpha=0.10,
+               label="all seeds exposed")
     ax.set_xlabel("refresh fraction f")
     ax.set_ylabel(r"$H_{\min}(c_n)$ (bits)")
     ax.set_title("Seed entropy after one leaked round")
@@ -86,10 +86,7 @@ def main() -> dict:
 
     ax = axes[2]
     ax = axes[2]
-    feasible_masked = np.ma.masked_where(feasible >= 1.0, feasible)
-    cmap = plotting.plt.get_cmap("viridis").copy()
-    cmap.set_bad("#d5d8dc")          # infeasible cells: neutral grey
-    im = ax.imshow(feasible_masked, origin="lower", aspect="auto", cmap=cmap,
+    im = ax.imshow(feasible, origin="lower", aspect="auto", cmap="viridis",
                    vmin=0, vmax=1)
     ax.set_xticks(range(len(L_grid)))
     ax.set_xticklabels(L_grid)
@@ -97,13 +94,13 @@ def main() -> dict:
     ax.set_yticklabels(seed_grid)
     ax.set_xlabel("spreading factor L")
     ax.set_ylabel("seed length (bits)")
-    ax.set_title(r"required refresh $f_{\min}$" + "\n(grey = infeasible)")
+    ax.set_title(r"required refresh $f_{\min}$" + "\n(0 = constraint does not bind)")
     for i in range(len(seed_grid)):
         for j in range(len(L_grid)):
             v = feasible[i, j]
-            ax.text(j, i, "N/A" if v >= 1.0 else f"{v:.2f}",
-                    ha="center", va="center", fontsize=6.5,
-                    color="k" if v >= 1.0 else ("w" if v < 0.55 else "k"))
+            label = "0" if v <= 0.0 else f"{v:.2f}"
+            ax.text(j, i, label, ha="center", va="center", fontsize=7,
+                    color="w" if v < 0.55 else "k")
     fig.colorbar(im, ax=ax, fraction=0.046)
 
     plotting.save(fig, "e4_refresh")

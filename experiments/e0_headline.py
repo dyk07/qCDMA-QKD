@@ -42,11 +42,14 @@ def main() -> dict:
 
     # --- authentication ----------------------------------------------------- #
     n_symbols = 10 ** 8
+    sym_rate = cdma.symbol_rate()
     i_ab25 = rate_at(cfg, 25.0, xi_req)["I_AB"]
     b = budget.round_budget(rate_at(cfg, 25.0, xi_req)["S_pos"] * n_symbols,
                             n_symbols, i_ab25, bcfg)
     snap.update(round_symbols=n_symbols,
-                round_seconds=n_symbols / cfg.symbol_rate,
+                round_seconds=n_symbols / sym_rate,
+                chip_rate=cdma.chip_rate,
+                symbol_rate=sym_rate,
                 key_bits_per_round=b["K"],
                 auth_bits_per_round=b["a"],
                 auth_messages_per_round=b["n_messages"],

@@ -30,7 +30,11 @@ def rate_at(cfg: CVQKDConfig, distance_km: float, extra_xi: float = 0.0) -> dict
 
 
 def rate_fn(cfg: CVQKDConfig, symbol_rate: float, extra_xi: float = 0.0):
-    """Return ``f(distance_km) -> (key_rate_bps, I_AB)`` for budget sweeps."""
+    """Return ``f(distance_km) -> (key_rate_bps, I_AB)`` for budget sweeps.
+
+    ``symbol_rate`` must be the **per-user** symbol rate (``chip_rate / L``),
+    not the chip rate.  Passing the chip rate overstates the key rate by L.
+    """
     def f(distance_km: float):
         r = rate_at(cfg, float(distance_km), extra_xi)
         return r["S_pos"] * symbol_rate, r["I_AB"]

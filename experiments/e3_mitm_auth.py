@@ -27,7 +27,7 @@ def main() -> dict:
     sc = scenario()
     cfg, bcfg, cdma = sc["cv"], sc["budget"], sc["cdma"]
     n_symbols = 10 ** 8
-    symbol_rate = cfg.symbol_rate
+    symbol_rate = cdma.symbol_rate()   # per-user: chip_rate / L
     # same operating point as E5/E7: charge the MUI excess noise
     xi_mui = mui.required_xi(1e-12, mui.uniform_kappa(cdma.n_users - 1, 1.0),
                              cdma.spreading_factor)

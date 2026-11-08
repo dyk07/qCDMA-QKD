@@ -44,15 +44,20 @@ def main() -> dict:
           f"{cvqkd.max_distance(cfg, 0.0546):.1f} km")
 
     # --- plot ------------------------------------------------------------- #
+    sym_rate = sc["cdma"].symbol_rate()
     fig, axes = plotting.plt.subplots(1, 2, figsize=(9.4, 3.5))
     ax = axes[0]
-    # bits/symbol * symbol_rate -> bits/s; show Mbit/s
-    ax.plot(distances, asym * cfg.symbol_rate / 1e6, label="asymptotic")
-    ax.plot(distances, finite * cfg.symbol_rate / 1e6, "--",
+    # bits/symbol * per-user symbol_rate -> bits/s; show kbit/s
+    ax.plot(distances, asym * sym_rate / 1e3, label="asymptotic")
+    ax.plot(distances, finite * sym_rate / 1e3, "--",
             label="finite size (n=1e8)")
     ax.set_xlabel("fibre length (km)")
-    ax.set_ylabel("secret key rate (Mbit/s)")
-    ax.set_title("GG02 homodyne, reverse reconciliation")
+    ax.set_ylabel("secret key rate (kbit/s, one user)")
+    ax.set_title("GG02 homodyne, RR: rate vs distance")
+    plotting.annotate(ax, f"$R_c$ = {sc['cdma'].chip_rate/1e9:.0f} Gchip/s\n"
+                          f"L = {sc['cdma'].spreading_factor}\n"
+                          f"$R_s$ = {sym_rate/1e6:.2f} Msym/s",
+                      xy=(0.62, 0.62), fontsize=7)
     ax.legend(loc="upper right")
 
     ax = axes[1]

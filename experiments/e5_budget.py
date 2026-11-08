@@ -25,7 +25,7 @@ def main() -> dict:
     sc = scenario()
     cfg, bcfg, cdma = sc["cv"], sc["budget"], sc["cdma"]
     n_symbols = 10 ** 8
-    symbol_rate = cfg.symbol_rate
+    symbol_rate = cdma.symbol_rate()   # per-user: chip_rate / L
 
     # MUI charge (worst case, 8 users, L chips)
     kappa = mui.uniform_kappa(cdma.n_users - 1, 1.0)

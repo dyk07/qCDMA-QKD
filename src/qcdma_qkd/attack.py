@@ -223,31 +223,48 @@ def refresh_security_constraint(seed_bits: int, L: int,
     independent knobs.  Alternatively one shortens the seed (``L / seed_bits``
     chips per seed bit) or accepts the computational-PRF model, which has no such
     constraint at the cost of a computational security statement.
+
+    The constraint is *always* satisfiable
+    -------------------------------------
+    Because ``f = 1`` gives ``k_known = 0``, at least one feasible ``f`` exists
+    for **every** ``seed_bits > 0``.  In particular:
+
+    * ``seed <  L p``  -> ``f_min > 0``: refreshing is required.
+    * ``seed >= L p``  -> ``f_min = 0``: the code is already shorter than the
+      seed, so Eve cannot saturate the seed *even without refreshing*
+      (``k_known <= L <= seed``).  A longer seed makes the protocol **more**
+      tolerant, not less.
+
+    There is therefore **no "infeasible" regime** for this constraint; it only
+    stops biting.  (An earlier version of this function returned
+    ``feasible=False`` for ``seed >= L``, which was backwards.)
     """
     if L <= 0:
         raise ValueError("L must be positive")
+    p = float(np.clip(p_blind, 0.0, 1.0))
     if model == "prf":
         return dict(model=model, seed_bits=int(seed_bits), L=int(L),
-                    p_blind=float(p_blind), f_min=0.0,
+                    p_blind=p, f_min=0.0,
                     max_known_chips=float(L), feasible=True,
                     note="computational PRF: no extractor constraint")
     if model != "extractor":
         raise ValueError(f"unknown model {model!r}")
-    # infeasible as soon as the seed itself exceeds the code length
-    if seed_bits >= L * float(p_blind):
+    if p <= 0.0:
+        # Eve learns nothing at all: no refresh needed
         return dict(model=model, seed_bits=int(seed_bits), L=int(L),
-                    p_blind=float(p_blind), f_min=1.0,
-                    max_known_chips=float(seed_bits),
-                    known_chips_at_fmin=float(seed_bits),
-                    feasible=False,
-                    note="seed longer than the code: no refresh rate can help")
-    f_min = float(np.clip(1.0 - seed_bits / (L * float(p_blind)), 0.0, 1.0))
+                    p_blind=0.0, f_min=0.0, max_known_chips=0.0,
+                    known_chips_at_fmin=0.0, feasible=True,
+                    note="p_blind = 0: no leakage, no constraint")
+    f_min = float(np.clip(1.0 - seed_bits / (L * p), 0.0, 1.0))
     return dict(model=model, seed_bits=int(seed_bits), L=int(L),
-                p_blind=float(p_blind), f_min=f_min,
+                p_blind=p, f_min=f_min,
                 max_known_chips=float(seed_bits),
                 known_chips_at_fmin=float(seed_bits),
-                feasible=bool(f_min < 1.0),
-                note="extractor: known chips must not exhaust the seed")
+                feasible=True,
+                binds=bool(f_min > 0.0),
+                note=("extractor: known chips must not exhaust the seed"
+                      if f_min > 0 else
+                      "seed >= L*p: constraint does not bind (f=0 is safe)"))
 
 
 def max_chips_per_seed_bit(seed_bits: int, refresh_fraction: float,
@@ -259,6 +276,76 @@ def max_chips_per_seed_bit(seed_bits: int, refresh_fraction: float,
     """
     denom = max(1.0 - float(refresh_fraction), 1e-12) * float(p_blind)
     return float(1.0 / denom)
+
+
+def refresh_constraint_exact(seed_bits: int, L: int, p_blind: float = 1.0,
+                             eps_code: float = 1e-12,
+                             tol: float = 1e-4) -> dict:
+    r"""Exact (tail-based) refresh constraint, replacing the mean heuristic.
+
+    Why the mean is not enough
+    --------------------------
+    :func:`refresh_security_constraint` enforces
+
+        E[k_known] = (1-f) L p < seed_bits,
+
+    i.e. it controls the *average* number of known chips.  But ``k_known`` is a
+    binomial random variable, and the security condition is a **tail** event:
+
+        P(k_known >= seed_bits) <= eps_code        (seed min-entropy is lost)
+
+    For ``p < 1`` the mean sits ~1.6 standard deviations below ``seed_bits``
+    even when the tail probability is still O(10^-2).  Concretely at
+    ``f = 0.75``, ``L = 1024``, ``seed = 256``, ``p = 0.99`` the mean rule says
+    "safe" (E[k] = 253.4 < 256) while the true violation probability is
+    ``7.6e-2`` -- twelve orders of magnitude above the target.
+
+    This function solves the condition exactly with the binomial survival
+    function:
+
+        k_known ~ Binomial( round((1-f) L), p )
+        f_min   = min{ f : P(k_known >= seed_bits) <= eps_code }
+
+    For ``p -> 1`` it reproduces the closed form ``1 - seed/(L p)`` to within
+    one chip (the ``P = 1`` rounding of ``(1-f)L``), so the headline numbers in
+    the docs are unchanged; the difference only appears once blind estimation
+    is imperfect.
+    """
+    from scipy import stats
+
+    if L <= 0:
+        raise ValueError("L must be positive")
+    p = float(np.clip(p_blind, 0.0, 1.0))
+
+    def violation(f: float) -> float:
+        n_reused = int(round((1.0 - f) * L))
+        if n_reused < seed_bits:
+            # fewer reused chips than the seed length: cannot saturate
+            return 0.0
+        if p >= 1.0:
+            return 1.0        # deterministically >= seed_bits
+        return float(stats.binom.sf(seed_bits - 1, n_reused, p))
+
+    if violation(1.0) > eps_code:
+        return dict(f_min=1.0, feasible=False, eps_code=eps_code,
+                    violation=violation(1.0),
+                    note="no refresh rate satisfies the tail condition")
+    if violation(0.0) <= eps_code:
+        return dict(f_min=0.0, feasible=True, eps_code=eps_code,
+                    violation=violation(0.0),
+                    note="tail condition already satisfied without refreshing")
+
+    lo, hi = 0.0, 1.0
+    while hi - lo > tol:
+        mid = 0.5 * (lo + hi)
+        if violation(mid) > eps_code:
+            lo = mid
+        else:
+            hi = mid
+    return dict(f_min=float(hi), feasible=True, eps_code=eps_code,
+                violation=violation(hi),
+                f_min_mean=float(max(0.0, 1.0 - seed_bits / (L * p))),
+                note="exact binomial tail constraint")
 
 
 def cross_round_eps(refresh_fraction: float, seed_bits: int, L: int,

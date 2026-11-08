@@ -31,17 +31,48 @@ class CVQKDConfig:
     beta: float = 0.95          # reconciliation efficiency
     alpha_db_per_km: float = 0.2
     detection: str = "homodyne"  # homodyne only; see cvqkd.holevo_bound
-    symbol_rate: float = 1.0e9   # symbols / s (chip rate)
+    # NOTE: the *per-user symbol* rate is NOT an independent parameter here.  It
+    # is fixed by the hardware chip rate and the spreading factor:
+    #     symbol_rate = chip_rate / L
+    # See ``CDMAConfig.symbol_rate()``.  A free ``symbol_rate`` sitting next to
+    # ``L`` silently implies impossible chip rates (1e9 sym/s * L=1024 =
+    # 1.02 Tchip/s), so it has been removed from this dataclass.
 
 
 @dataclass
 class CDMAConfig:
-    """q-CDMA multiplex."""
+    """q-CDMA multiplex.
+
+    Rate bookkeeping
+    ----------------
+    The hardware runs at the **chip** rate ``chip_rate`` (chips/s).  Each user
+    transmits one **symbol** per ``L`` chips, so::
+
+        symbol_rate = chip_rate / L                  [symbols/s per user]
+        bit_rate    = S [bits/symbol] * symbol_rate  [bits/s per user]
+
+    ``L`` therefore costs a factor ``L`` in rate *in addition to* being the
+    parameter that suppresses MUI and (see docs/05) constrains the refresh
+    fraction.  Never treat ``symbol_rate`` as a free knob.
+    """
 
     n_users: int = 8
     spreading_factor: int = 1024      # L, chips per symbol
+    chip_rate: float = 1.0e9          # chips / s (hardware line rate)
     code_family: str = "random"       # "random" | "walsh"
     refresh_fraction: float = 1.0     # fraction of chips re-randomised each round
+
+    def symbol_rate(self) -> float:
+        """Per-user symbol rate, ``chip_rate / L`` (symbols/s)."""
+        return self.chip_rate / float(self.spreading_factor)
+
+    def bit_rate(self, rate_per_symbol: float) -> float:
+        """Convert a bits/symbol figure into bits/s for one user."""
+        return float(rate_per_symbol) * self.symbol_rate()
+
+    def symbols_per_second(self) -> float:
+        """Alias of :meth:`symbol_rate` (explicit name at call sites)."""
+        return self.symbol_rate()
 
 
 @dataclass
