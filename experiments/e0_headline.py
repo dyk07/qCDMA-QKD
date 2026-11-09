@@ -62,12 +62,30 @@ def main() -> dict:
     snap.update(k0_required=k0["required"], k0_available=k0["available"],
                 k0_fraction=k0["fraction_of_k0"])
 
-    # --- refresh constraint ------------------------------------------------- #
-    con_ext = attack.refresh_security_constraint(bcfg.seed_bits, L, model="extractor")
+    # --- code model: PRF + f=1 is the sample-model answer -------------------- #
+    chosen = cdma.refresh_constraint(bcfg.seed_bits, eps_code=1e-12)
+    snap.update(code_model=chosen["code_model"],
+                code_security=chosen["security"],
+                code_refresh_fraction=chosen["refresh_fraction"],
+                code_refresh_satisfied=chosen["satisfied"],
+                code_f_min_chosen=chosen["f_min"])
+
+    # --- refresh constraint, both routes (for the IT alternative) ------------ #
+    eps_target = 1e-12
+    con_ext = attack.refresh_security_constraint(bcfg.seed_bits, L,
+                                                 eps_code=eps_target)
     con_prf = attack.refresh_security_constraint(bcfg.seed_bits, L, model="prf")
+    con_tail = attack.refresh_constraint_tail(bcfg.seed_bits, L, 1.0,
+                                              eps_code=eps_target)
     snap.update(refresh_f_min_extractor=con_ext["f_min"],
                 refresh_f_min_prf=con_prf["f_min"],
+                refresh_f_min_tail=con_tail["f_min"],
+                refresh_eps_code_target=eps_target,
+                refresh_k_req_bits=con_ext["k_req"],
                 refresh_max_known_chips=con_ext["max_known_chips"])
+    print(f"  code model = {chosen['code_model']}, f = "
+          f"{chosen['refresh_fraction']:g} -> {chosen['security']}")
+    print(f"  (extractor alternative would need f >= {con_tail['f_min']:.4f})")
 
     # --- MitM --------------------------------------------------------------- #
     snap.update(mitm_unauth_detection=attack.man_in_the_middle(

@@ -9,6 +9,8 @@
     "min_surplus": 0.9999406052243985,
     "xi_mui": 0.06917819898117773,
     "rate_per_symbol": 0.04312368087077528,
+    "code_model": "prf",
+    "refresh_fraction": 1.0,
     "auth_ok_all": true
   },
   "rounds": [

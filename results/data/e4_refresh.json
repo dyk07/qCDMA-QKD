@@ -731,42 +731,98 @@
     ]
   },
   "eps_prf": 8.636168555094445e-78,
+  "eps_target": 1e-12,
+  "k_req": 39.86313713864835,
+  "tail": {
+    "128": {
+      "seed_bits": 128,
+      "L": 1024,
+      "p_blind": 1.0,
+      "eps_code": 1e-12,
+      "k_req": 39.86313713864835,
+      "k_max_allowed": 88.13686286135166,
+      "f_min": 0.91357421875,
+      "feasible": true,
+      "violation": 0.0,
+      "binds": true,
+      "f_min_mean": 0.9139288448619612,
+      "note": "exact binomial tail constraint at eps_code target"
+    },
+    "256": {
+      "seed_bits": 256,
+      "L": 1024,
+      "p_blind": 1.0,
+      "eps_code": 1e-12,
+      "k_req": 39.86313713864835,
+      "k_max_allowed": 216.13686286135166,
+      "f_min": 0.78857421875,
+      "feasible": true,
+      "violation": 0.0,
+      "binds": true,
+      "f_min_mean": 0.7889288448619612,
+      "note": "exact binomial tail constraint at eps_code target"
+    },
+    "512": {
+      "seed_bits": 512,
+      "L": 1024,
+      "p_blind": 1.0,
+      "eps_code": 1e-12,
+      "k_req": 39.86313713864835,
+      "k_max_allowed": 472.13686286135163,
+      "f_min": 0.53857421875,
+      "feasible": true,
+      "violation": 0.0,
+      "binds": true,
+      "f_min_mean": 0.5389288448619614,
+      "note": "exact binomial tail constraint at eps_code target"
+    }
+  },
+  "chosen_model": "prf",
+  "chosen_refresh": 1.0,
+  "chosen_security": "computational",
+  "chosen_f_min": 0.0,
   "constraint": {
     "128": {
       "model": "extractor",
       "seed_bits": 128,
       "L": 1024,
       "p_blind": 1.0,
-      "f_min": 0.875,
-      "max_known_chips": 128.0,
-      "known_chips_at_fmin": 128.0,
+      "eps_code": 1e-12,
+      "k_req": 39.86313713864835,
+      "f_min": 0.9139288448619612,
+      "max_known_chips": 88.13686286135166,
+      "known_chips_at_fmin": 88.13686286135166,
       "feasible": true,
       "binds": true,
-      "note": "extractor: known chips must not exhaust the seed"
+      "note": "extractor: known chips must not consume the security margin"
     },
     "256": {
       "model": "extractor",
       "seed_bits": 256,
       "L": 1024,
       "p_blind": 1.0,
-      "f_min": 0.75,
-      "max_known_chips": 256.0,
-      "known_chips_at_fmin": 256.0,
+      "eps_code": 1e-12,
+      "k_req": 39.86313713864835,
+      "f_min": 0.7889288448619612,
+      "max_known_chips": 216.13686286135166,
+      "known_chips_at_fmin": 216.13686286135166,
       "feasible": true,
       "binds": true,
-      "note": "extractor: known chips must not exhaust the seed"
+      "note": "extractor: known chips must not consume the security margin"
     },
     "512": {
       "model": "extractor",
       "seed_bits": 512,
       "L": 1024,
       "p_blind": 1.0,
-      "f_min": 0.5,
-      "max_known_chips": 512.0,
-      "known_chips_at_fmin": 512.0,
+      "eps_code": 1e-12,
+      "k_req": 39.86313713864835,
+      "f_min": 0.5389288448619614,
+      "max_known_chips": 472.13686286135163,
+      "known_chips_at_fmin": 472.13686286135163,
       "feasible": true,
       "binds": true,
-      "note": "extractor: known chips must not exhaust the seed"
+      "note": "extractor: known chips must not consume the security margin"
     }
   },
   "L_grid": [
@@ -785,36 +841,36 @@
   ],
   "f_min_map": [
     [
+      0.30859375,
+      0.654296875,
+      0.8271484375,
+      0.91357421875,
+      0.956787109375,
+      0.9783935546875
+    ],
+    [
       0.0,
-      0.5,
-      0.75,
-      0.875,
-      0.9375,
-      0.96875
+      0.154296875,
+      0.5771484375,
+      0.78857421875,
+      0.894287109375,
+      0.9471435546875
     ],
     [
       0.0,
       0.0,
-      0.5,
-      0.75,
-      0.875,
-      0.9375
+      0.0771484375,
+      0.53857421875,
+      0.769287109375,
+      0.8846435546875
     ],
     [
       0.0,
       0.0,
       0.0,
-      0.5,
-      0.75,
-      0.875
-    ],
-    [
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.5,
-      0.75
+      0.03857421875,
+      0.519287109375,
+      0.7596435546875
     ]
   ]
 }

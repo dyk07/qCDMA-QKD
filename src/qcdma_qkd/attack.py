@@ -162,6 +162,34 @@ def eps_code_from_entropy(h_min: float, security_margin_bits: float = 0.0) -> fl
     return float(min(1.0, 2.0 ** (-(h_min - security_margin_bits))))
 
 
+def required_entropy_bits(eps_code: float) -> float:
+    """Min-entropy (bits) that must survive for a given eps_code target.
+
+        eps_code = 2^{-H_min}  <=>  H_min = log2(1/eps_code)
+
+    This is the ``k_req`` of the refresh constraint: it is the amount of seed
+    entropy that must remain *unconsumed*.  "H_min > 0" is NOT a security
+    criterion -- it only excludes the single point where Eve is certain, and
+    still permits eps_code = 0.5 (one bit of entropy).  Every security statement
+    in this project is written in terms of an explicit eps_code target.
+    """
+    if not 0.0 < eps_code <= 1.0:
+        raise ValueError("eps_code must be in (0, 1]")
+    return float(np.log2(1.0 / eps_code))
+
+
+def max_tolerable_known_chips(seed_bits: int, eps_code: float = 1e-12) -> float:
+    """Largest number of chips Eve may know while keeping eps_code on target.
+
+        H_min = seed_bits - k_known >= k_req = log2(1/eps_code)
+        =>  k_known <= seed_bits - k_req
+
+    With seed=256, eps=1e-12 this is 216.1 chips, not 256: the last ~40 bits of
+    the seed are the security margin and cannot be spent.
+    """
+    return float(seed_bits - required_entropy_bits(eps_code))
+
+
 def required_observations(seed_bits: int, L: int, observation_snr: float,
                           target_p_chip: float = 0.99) -> float:
     """Observations Eve needs to reach a per-chip success of ``target_p_chip``."""
@@ -195,145 +223,163 @@ def blind_estimation_table(observation_snrs: np.ndarray, seed_bits: int, L: int,
 # --------------------------------------------------------------------------- #
 def refresh_security_constraint(seed_bits: int, L: int,
                                 p_blind: float = 1.0,
+                                eps_code: float = 1e-12,
                                 model: str = "extractor") -> dict:
-    r"""Minimum refresh fraction f, from the seed's min-entropy budget.
+    r"""Minimum refresh fraction f, from an explicit eps_code target.
 
-    Derivation
-    ----------
+    Security criterion
+    ------------------
+    The *wrong* criterion (used by earlier versions) is ``H_min > 0``.  That only
+    excludes the single point where Eve is certain, and still permits
+    ``eps_code = 0.5``.  The correct requirement is
+
+        eps_code = 2^{-H_min} <= eps_code_target
+        <=>  H_min >= k_req := log2(1/eps_code_target)
+
+    With ``H_min = seed_bits - k_known`` this gives
+
+        k_known <= seed_bits - k_req
+
+    so the last ``k_req`` bits of the seed are a security margin that cannot be
+    spent.  With ``seed = 256`` and ``eps = 1e-12``, ``k_req = 39.9`` bit, so the
+    tolerable leakage is 216.1 chips, not 256.
+
+    Mean (closed form)
+    ------------------
     Chips are re-drawn independently with probability ``f``, so a fraction
-    ``1 - f`` of the round-``n`` code equals round-``n-1``'s code.  If Eve
-    succeeded on a fraction ``p_blind`` of the *previous* code, she knows
+    ``1 - f`` of the round-n code equals round-(n-1)'s code.  If Eve knows a
+    fraction ``p_blind`` of the previous code, she knows
 
         k_known = (1 - f) * L * p_blind
 
-    chips of the current code.  Under the extractor model each known chip is one
-    linear constraint on the ``seed_bits``-bit seed, so a non-zero min-entropy
-    of the current seed requires the *known* chips to be fewer than the seed:
+    chips of the current code.  Requiring ``k_known <= seed_bits - k_req``:
 
-        (1 - f) * L * p_blind < seed_bits
-        <=>  f > 1 - seed_bits / (L * p_blind)
+        (1 - f) * L * p_blind < seed_bits - k_req
+        <=>  f > 1 - (seed_bits - k_req) / (L * p_blind)
 
-    For the defaults (``seed_bits = 256``, ``L = 1024``, ``p_blind = 1``) this
-    gives ``f > 0.75`` -- far stricter than the naive "fresh chips must outnumber
-    the seed" rule (``f > 0.25``), which is **wrong** because what matters is how
-    much of the seed Eve *knows*, not how much she does not.
+    This is the **mean** rule: it constrains E[k_known].  It is only exact when
+    ``p_blind = 1``; for ``p_blind < 1`` use
+    :func:`refresh_constraint_tail`, which is the default everywhere else in
+    this project.
 
-    This is the concrete, previously unstated design constraint of the paper:
-    the spreading factor, the code-seed length and the refresh interval are not
-    independent knobs.  Alternatively one shortens the seed (``L / seed_bits``
-    chips per seed bit) or accepts the computational-PRF model, which has no such
-    constraint at the cost of a computational security statement.
-
-    The constraint is *always* satisfiable
-    -------------------------------------
-    Because ``f = 1`` gives ``k_known = 0``, at least one feasible ``f`` exists
-    for **every** ``seed_bits > 0``.  In particular:
-
-    * ``seed <  L p``  -> ``f_min > 0``: refreshing is required.
-    * ``seed >= L p``  -> ``f_min = 0``: the code is already shorter than the
-      seed, so Eve cannot saturate the seed *even without refreshing*
-      (``k_known <= L <= seed``).  A longer seed makes the protocol **more**
-      tolerant, not less.
-
-    There is therefore **no "infeasible" regime** for this constraint; it only
-    stops biting.  (An earlier version of this function returned
-    ``feasible=False`` for ``seed >= L``, which was backwards.)
+    Boundary behaviour
+    ------------------
+    Since ``f = 1`` gives ``k_known = 0``, a feasible ``f`` exists whenever
+    ``seed_bits > k_req``.  The constraint *stops binding* (``f_min = 0``) once
+    ``L * p_blind <= seed_bits - k_req``: a seed long enough relative to the code
+    needs no refreshing at all.  There is no "infeasible" regime -- only a
+    regime where the constraint is vacuous -- **unless** ``seed_bits <= k_req``,
+    i.e. the seed is too short to even hold the security margin.  That case is
+    genuinely infeasible and is reported as such.
     """
     if L <= 0:
         raise ValueError("L must be positive")
+    if not 0.0 < eps_code <= 1.0:
+        raise ValueError("eps_code must be in (0, 1]")
+    k_req = required_entropy_bits(eps_code)
     p = float(np.clip(p_blind, 0.0, 1.0))
+    base = dict(model=model, seed_bits=int(seed_bits), L=int(L),
+                p_blind=p, eps_code=eps_code, k_req=k_req)
+
     if model == "prf":
-        return dict(model=model, seed_bits=int(seed_bits), L=int(L),
-                    p_blind=p, f_min=0.0,
-                    max_known_chips=float(L), feasible=True,
-                    note="computational PRF: no extractor constraint")
+        return {**base, "f_min": 0.0, "max_known_chips": float(L),
+                "feasible": True, "binds": False,
+                "note": "computational PRF: no extractor constraint"}
+
     if model != "extractor":
         raise ValueError(f"unknown model {model!r}")
+
+    # the seed must be able to hold the security margin at all
+    if seed_bits <= k_req:
+        return {**base, "f_min": 1.0,
+                "max_known_chips": float(seed_bits - k_req),
+                "feasible": False, "binds": True,
+                "note": ("seed_bits <= log2(1/eps_code): the seed is too short "
+                         "to hold the security margin; lengthen the seed")}
+
+    budget_chips = seed_bits - k_req        # entropy that may be consumed
     if p <= 0.0:
-        # Eve learns nothing at all: no refresh needed
-        return dict(model=model, seed_bits=int(seed_bits), L=int(L),
-                    p_blind=0.0, f_min=0.0, max_known_chips=0.0,
-                    known_chips_at_fmin=0.0, feasible=True,
-                    note="p_blind = 0: no leakage, no constraint")
-    f_min = float(np.clip(1.0 - seed_bits / (L * p), 0.0, 1.0))
-    return dict(model=model, seed_bits=int(seed_bits), L=int(L),
-                p_blind=p, f_min=f_min,
-                max_known_chips=float(seed_bits),
-                known_chips_at_fmin=float(seed_bits),
-                feasible=True,
-                binds=bool(f_min > 0.0),
-                note=("extractor: known chips must not exhaust the seed"
-                      if f_min > 0 else
-                      "seed >= L*p: constraint does not bind (f=0 is safe)"))
+        return {**base, "f_min": 0.0, "max_known_chips": float(budget_chips),
+                "feasible": True, "binds": False,
+                "note": "p_blind = 0: no leakage, no constraint"}
+
+    f_min = float(np.clip(1.0 - budget_chips / (L * p), 0.0, 1.0))
+    return {**base, "f_min": f_min, "max_known_chips": float(budget_chips),
+            "known_chips_at_fmin": float(budget_chips),
+            "feasible": True, "binds": bool(f_min > 0.0),
+            "note": ("extractor: known chips must not consume the security "
+                     "margin" if f_min > 0 else
+                     "constraint does not bind (f = 0 already meets eps_code)")}
 
 
-def max_chips_per_seed_bit(seed_bits: int, refresh_fraction: float,
-                           p_blind: float = 1.0) -> float:
-    """Largest ``L / seed_bits`` allowed at a given refresh fraction.
+def refresh_constraint_tail(seed_bits: int, L: int, p_blind: float = 1.0,
+                            eps_code: float = 1e-12,
+                            tol: float = 1e-4) -> dict:
+    r"""Default refresh constraint: exact binomial **tail**, eps_code target.
 
-    Inverting ``(1-f) L p < seed_bits`` gives ``L < seed_bits / ((1-f) p)``,
-    i.e. at most ``1/((1-f) p)`` chips per seed bit.
-    """
-    denom = max(1.0 - float(refresh_fraction), 1e-12) * float(p_blind)
-    return float(1.0 / denom)
+    This is the rigorous form and should be preferred over the closed form.
 
+    Two corrections over :func:`refresh_security_constraint`
+    -------------------------------------------------------
+    (a) **eps target, not H_min > 0.**  The tail event of interest is that Eve
+        consumes the whole security margin, not merely the whole seed:
 
-def refresh_constraint_exact(seed_bits: int, L: int, p_blind: float = 1.0,
-                             eps_code: float = 1e-12,
-                             tol: float = 1e-4) -> dict:
-    r"""Exact (tail-based) refresh constraint, replacing the mean heuristic.
+            k_known >= seed_bits - k_req,      k_req = log2(1/eps_code)
 
-    Why the mean is not enough
-    --------------------------
-    :func:`refresh_security_constraint` enforces
+    (b) **Tail, not mean.**  ``k_known ~ Binomial(round((1-f) L), p_blind)`` is
+        random; constraining its mean leaves the upper tail uncontrolled.
 
-        E[k_known] = (1-f) L p < seed_bits,
+    The solver is therefore
 
-    i.e. it controls the *average* number of known chips.  But ``k_known`` is a
-    binomial random variable, and the security condition is a **tail** event:
+        f_min = min{ f : P(k_known >= seed_bits - k_req) <= eps_code_tail }
 
-        P(k_known >= seed_bits) <= eps_code        (seed min-entropy is lost)
+    where ``eps_code_tail`` is split from the budget: we require the tail
+    probability itself to be at most ``eps_code``, which is then a *total*
+    variation distance of the same order.
 
-    For ``p < 1`` the mean sits ~1.6 standard deviations below ``seed_bits``
-    even when the tail probability is still O(10^-2).  Concretely at
-    ``f = 0.75``, ``L = 1024``, ``seed = 256``, ``p = 0.99`` the mean rule says
-    "safe" (E[k] = 253.4 < 256) while the true violation probability is
-    ``7.6e-2`` -- twelve orders of magnitude above the target.
-
-    This function solves the condition exactly with the binomial survival
-    function:
-
-        k_known ~ Binomial( round((1-f) L), p )
-        f_min   = min{ f : P(k_known >= seed_bits) <= eps_code }
-
-    For ``p -> 1`` it reproduces the closed form ``1 - seed/(L p)`` to within
-    one chip (the ``P = 1`` rounding of ``(1-f)L``), so the headline numbers in
-    the docs are unchanged; the difference only appears once blind estimation
-    is imperfect.
+    Numbers (seed=256, L=1024, p=1, eps=1e-12): ``k_req = 39.9``, so at most
+    216.1 chips may be known, giving ``f_min = 1 - 216.1/1024 = 0.789`` --
+    versus 0.75 under the old ``H_min > 0`` rule, whose actual eps_code at
+    f = 0.75 is 1.0 (total loss).
     """
     from scipy import stats
 
     if L <= 0:
         raise ValueError("L must be positive")
+    if not 0.0 < eps_code <= 1.0:
+        raise ValueError("eps_code must be in (0, 1]")
+    k_req = required_entropy_bits(eps_code)
+    k_max = seed_bits - k_req          # chips may be known without violating eps
     p = float(np.clip(p_blind, 0.0, 1.0))
+    base = dict(seed_bits=int(seed_bits), L=int(L), p_blind=p,
+                eps_code=eps_code, k_req=k_req, k_max_allowed=float(k_max))
+
+    if seed_bits <= k_req:
+        return {**base, "f_min": 1.0, "feasible": False, "violation": 1.0,
+                "note": "seed too short to hold the security margin"}
+
+    if p <= 0.0:
+        return {**base, "f_min": 0.0, "feasible": True, "violation": 0.0,
+                "note": "p_blind = 0: no leakage"}
 
     def violation(f: float) -> float:
+        """P(k_known >= k_max) for a refresh fraction f."""
         n_reused = int(round((1.0 - f) * L))
-        if n_reused < seed_bits:
-            # fewer reused chips than the seed length: cannot saturate
+        # known chips cannot exceed the reused chips
+        if n_reused <= k_max:
             return 0.0
         if p >= 1.0:
-            return 1.0        # deterministically >= seed_bits
-        return float(stats.binom.sf(seed_bits - 1, n_reused, p))
+            return 1.0
+        return float(stats.binom.sf(np.ceil(k_max) - 1, n_reused, p))
 
     if violation(1.0) > eps_code:
-        return dict(f_min=1.0, feasible=False, eps_code=eps_code,
-                    violation=violation(1.0),
-                    note="no refresh rate satisfies the tail condition")
+        return {**base, "f_min": 1.0, "feasible": False,
+                "violation": violation(1.0),
+                "note": "no refresh rate satisfies the tail condition"}
     if violation(0.0) <= eps_code:
-        return dict(f_min=0.0, feasible=True, eps_code=eps_code,
-                    violation=violation(0.0),
-                    note="tail condition already satisfied without refreshing")
+        return {**base, "f_min": 0.0, "feasible": True,
+                "violation": violation(0.0), "binds": False,
+                "note": "tail condition already met without refreshing"}
 
     lo, hi = 0.0, 1.0
     while hi - lo > tol:
@@ -342,10 +388,27 @@ def refresh_constraint_exact(seed_bits: int, L: int, p_blind: float = 1.0,
             lo = mid
         else:
             hi = mid
-    return dict(f_min=float(hi), feasible=True, eps_code=eps_code,
-                violation=violation(hi),
-                f_min_mean=float(max(0.0, 1.0 - seed_bits / (L * p))),
-                note="exact binomial tail constraint")
+    return {**base, "f_min": float(hi), "feasible": True,
+            "violation": violation(hi), "binds": True,
+            "f_min_mean": float(refresh_security_constraint(
+                seed_bits, L, p, eps_code)["f_min"]),
+            "note": "exact binomial tail constraint at eps_code target"}
+
+
+def max_chips_per_seed_bit(seed_bits: int, refresh_fraction: float,
+                           p_blind: float = 1.0,
+                           eps_code: float = 1e-12) -> float:
+    """Largest ``L / seed_bits`` allowed at a given refresh fraction.
+
+    Inverting ``(1-f) L p <= seed_bits - k_req`` gives
+    ``L <= (seed_bits - k_req) / ((1-f) p)``, i.e. at most
+    ``(1 - k_req/seed_bits) / ((1-f) p)`` chips per seed bit.
+    """
+    budget = seed_bits - required_entropy_bits(eps_code)
+    if budget <= 0:
+        return 0.0
+    denom = max(1.0 - float(refresh_fraction), 1e-12) * float(p_blind)
+    return float(budget / seed_bits / denom)
 
 
 def cross_round_eps(refresh_fraction: float, seed_bits: int, L: int,

@@ -54,13 +54,47 @@ class CDMAConfig:
     ``L`` therefore costs a factor ``L`` in rate *in addition to* being the
     parameter that suppresses MUI and (see docs/05) constrains the refresh
     fraction.  Never treat ``symbol_rate`` as a free knob.
+
+    Code model
+    ----------
+    ``code_model`` selects how the codebook is expanded from the seed, and it
+    decides whether a refresh constraint exists at all:
+
+    ``"prf"`` (default, and the choice made for this project's sample model)
+        ``c_n = PRF_{c_seed}(...)``.  Observing output bits does **not** leak
+        seed bits, so a leaked chip consumes no seed entropy and
+        ``f_min = 0``.  **Use ``refresh_fraction = 1.0``** anyway: fresh codes
+        every round cost nothing (the PRF expands them locally) and remove
+        cross-round correlation entirely.  Security of this layer is
+        **computational** (a PRF assumption), not information-theoretic.
+
+    ``"extractor"`` (information-theoretic alternative)
+        The seed is fed to a 2-universal extractor, so each known chip is one
+        linear constraint on the seed: ``H_min ~ seed_bits - k_known``.  This
+        *is* information-theoretic, but it forces ``f >= f_min`` because a
+        256-bit seed cannot absorb 1024 known chips.  See
+        ``docs/05_security.md`` §5 for the full derivation; the constraint is
+        computed by :meth:`refresh_constraint`.
+
+    The sample model uses ``"prf"`` with ``f = 1``.  The extractor path is kept
+    fully implemented so the *price* of information-theoretic codes is a
+    computable number rather than a hand-wave.
     """
 
     n_users: int = 8
     spreading_factor: int = 1024      # L, chips per symbol
     chip_rate: float = 1.0e9          # chips / s (hardware line rate)
     code_family: str = "random"       # "random" | "walsh"
+    code_model: str = "prf"           # "prf" (computational, default) | "extractor"
     refresh_fraction: float = 1.0     # fraction of chips re-randomised each round
+
+    def __post_init__(self) -> None:
+        if self.code_model not in ("prf", "extractor"):
+            raise ValueError(
+                "code_model must be 'prf' or 'extractor', got %r"
+                % (self.code_model,))
+        if not 0.0 <= float(self.refresh_fraction) <= 1.0:
+            raise ValueError("refresh_fraction must be in [0, 1]")
 
     def symbol_rate(self) -> float:
         """Per-user symbol rate, ``chip_rate / L`` (symbols/s)."""
@@ -73,6 +107,54 @@ class CDMAConfig:
     def symbols_per_second(self) -> float:
         """Alias of :meth:`symbol_rate` (explicit name at call sites)."""
         return self.symbol_rate()
+
+    def is_information_theoretic(self) -> bool:
+        """True when the code layer claims information-theoretic security."""
+        return self.code_model == "extractor"
+
+    def refresh_constraint(self, seed_bits: int, eps_code: float = 1e-12,
+                           p_blind: float = 1.0) -> dict:
+        """Refresh constraint implied by ``code_model``.
+
+        Delegates to :mod:`qcdma_qkd.attack` so the formula lives in exactly one
+        place.  For ``code_model="prf"`` the returned ``f_min`` is 0; for
+        ``code_model="extractor"`` it is the exact binomial-tail bound.
+        """
+        from . import attack as _attack
+
+        if self.code_model == "prf":
+            out = _attack.refresh_security_constraint(
+                seed_bits, self.spreading_factor, p_blind,
+                eps_code=eps_code, model="prf")
+        else:
+            out = _attack.refresh_constraint_tail(
+                seed_bits, self.spreading_factor, p_blind, eps_code=eps_code)
+        out["code_model"] = self.code_model
+        out["refresh_fraction"] = float(self.refresh_fraction)
+        if self.code_model == "prf":
+            out["satisfied"] = True       # no constraint under a PRF
+            out["security"] = "computational"
+        else:
+            out["satisfied"] = bool(
+                self.refresh_fraction + 1e-12 >= out["f_min"])
+            out["security"] = "information-theoretic (extractor model)"
+        return out
+
+    def check_refresh(self, seed_bits: int, eps_code: float = 1e-12,
+                      p_blind: float = 1.0) -> dict:
+        """Same as :meth:`refresh_constraint` but raises on a violation.
+
+        Use this at the top of a run when the design is supposed to be valid.
+        """
+        c = self.refresh_constraint(seed_bits, eps_code, p_blind)
+        if not c["satisfied"]:
+            raise ValueError(
+                "refresh_fraction=%g violates the extractor constraint "
+                "(f_min=%.4f for seed=%d, L=%d, eps_code=%g). Either raise f "
+                "or use code_model='prf'."
+                % (self.refresh_fraction, c["f_min"], seed_bits,
+                   self.spreading_factor, eps_code))
+        return c
 
 
 @dataclass

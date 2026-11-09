@@ -127,9 +127,13 @@ def test_mitm_survival_decays_with_rounds():
 
 
 def test_extractor_model_needs_more_fresh_chips_than_seed():
-    """Constraint: known chips (1-f)*L*p must be fewer than seed_bits."""
+    """Constraint: known chips (1-f)*L*p must leave the k_req margin intact."""
+    k_req = attack.required_entropy_bits(1e-12)
     c = attack.refresh_security_constraint(seed_bits=256, L=1024, model="extractor")
-    assert c["f_min"] == pytest.approx(1.0 - 256.0 / 1024.0)
+    assert c["f_min"] == pytest.approx(1.0 - (256.0 - k_req) / 1024.0)
+    # the old "known chips < seed_bits" rule would have certified f = 0.75, at
+    # which point the remaining min-entropy is exactly zero (eps_code = 1.0)
+    assert c["f_min"] > 1.0 - 256.0 / 1024.0
     assert c["feasible"]
     assert attack.refresh_security_constraint(256, 1024, model="prf")["f_min"] == 0.0
 

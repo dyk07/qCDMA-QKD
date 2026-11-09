@@ -14,6 +14,21 @@ The KDF is implemented with a keyed BLAKE2b in counter mode, which is a
 *demonstration* of the three-way split (domain-separated, independent outputs),
 **not** the information-theoretic extractor the security proof assumes.  The gap
 is stated explicitly in ``docs/05_security.md``.
+
+Code model (the project's final answer for the sample scenario)
+---------------------------------------------------------------
+``CDMAConfig.code_model`` defaults to ``"prf"`` with ``refresh_fraction = 1.0``:
+
+* a PRF expands the seed into the codebook, so observing chips does not leak
+  seed bits -- there is **no** refresh constraint, and
+* ``f = 1`` gives a fully fresh codebook every round, which kills cross-round
+  correlation outright.
+
+The price is that the code layer's secrecy is **computational** (a PRF
+assumption), not information-theoretic.  The information-theoretic route
+(``code_model = "extractor"``) is fully implemented: it needs ``f >= f_min``
+because a 256-bit seed cannot absorb ``L = 1024`` known chips -- see
+``CDMAConfig.refresh_constraint()`` and ``docs/05_security.md`` §5.
 """
 
 from __future__ import annotations
@@ -77,10 +92,19 @@ def split_key(k_bits: float, cfg: BudgetConfig, overhead_bits: float = 0.0) -> d
 
 
 def derive_codebook(seed: bytes, n_users: int, L: int, frame: int,
-                    session: int = 0) -> np.ndarray:
+                    session: int = 0,
+                    base: np.ndarray | None = None,
+                    refresh_fraction: float = 1.0,
+                    rng: np.random.Generator | None = None) -> np.ndarray:
     """PRF-based codebook: chips are the bits of a keyed BLAKE2b stream.
 
     ``c_i[l] = 2 * bit_l( PRF(seed, i, frame, session) ) - 1``
+
+    With ``base`` given, only a ``refresh_fraction`` fraction of chips is
+    re-drawn from the new PRF stream and the rest is carried over from
+    ``base``; this is what makes the refresh constraint of
+    ``docs/05_security.md`` §5 binding.  With ``refresh_fraction = 1`` (the
+    project default) ``base`` is irrelevant and every chip is fresh.
     """
     rows = np.empty((n_users, L), dtype=np.float64)
     for i in range(n_users):
@@ -88,6 +112,9 @@ def derive_codebook(seed: bytes, n_users: int, L: int, frame: int,
                             int(np.ceil(L / 8.0)))
         bits = np.unpackbits(np.frombuffer(stream, dtype=np.uint8))[:L]
         rows[i] = 2.0 * bits - 1.0
+    if base is not None and float(refresh_fraction) < 1.0:
+        rng = rng if rng is not None else np.random.default_rng(frame)
+        rows = codes.refreshed_codebook(base, refresh_fraction, rng)
     return rows
 
 
@@ -125,7 +152,8 @@ def simulate_round(round_index: int, seed: bytes, n_symbols: int,
                    interferer_powers: np.ndarray | None = None,
                    eps_mui: float = 1e-12,
                    tamper: bool = False,
-                   auth_key: bytes | None = None) -> RoundResult:
+                   auth_key: bytes | None = None,
+                   prev_codebook: np.ndarray | None = None) -> RoundResult:
     """One closed-loop round with the real budget and MUI accounting.
 
     ``K_n`` is *computed*, not supplied: it is the raw post-PA key produced by
@@ -134,7 +162,14 @@ def simulate_round(round_index: int, seed: bytes, n_symbols: int,
     """
     L = cfg_cdma.spreading_factor
     # --- codebook -------------------------------------------------------- #
-    codebook = derive_codebook(seed, cfg_cdma.n_users, L, round_index)
+    # ``prev_codebook`` carries the previous round's codes so that the
+    # configured ``refresh_fraction`` is actually honoured (it used to be a
+    # free parameter that nothing consumed).  For the project default
+    # (code_model='prf', f=1) every chip is fresh and the constraint of
+    # docs/05 §5 does not bind.
+    codebook = derive_codebook(seed, cfg_cdma.n_users, L, round_index,
+                               base=prev_codebook,
+                               refresh_fraction=cfg_cdma.refresh_fraction)
     # --- MUI -> excess noise (worst-case quantile, NOT the mean) ---------- #
     kappa = (mui.uniform_kappa(cfg_cdma.n_users - 1, 1.0)
              if interferer_powers is None
@@ -166,7 +201,9 @@ def simulate_round(round_index: int, seed: bytes, n_symbols: int,
                        extras=dict(I_AB=i_ab, chi_BE=r["chi_BE"],
                                    n_messages=b["n_messages"],
                                    surplus=b["surplus"], T=T,
-                                   seed=seed, auth_key=auth_key))
+                                   seed=seed, auth_key=auth_key,
+                                   code_model=cfg_cdma.code_model,
+                                   refresh_fraction=cfg_cdma.refresh_fraction))
 
 
 # --------------------------------------------------------------------------- #
@@ -194,11 +231,13 @@ def run_loop(n_rounds: int, k0_bits: int, cfg_cv: CVQKDConfig,
     k0_key = hashlib.sha256(b"K0-root").digest()
     auth_key = kdf_expand(k0_key, TAG_AUTH, 32)
     seed_bytes = kdf_expand(k0_key, TAG_SEED, 32)
+    prev_codebook: np.ndarray | None = None
 
     for n in range(1, n_rounds + 1):
         rr = simulate_round(n, seed_bytes, n_symbols, cfg_cv, cfg_cdma, cfg_bud,
                             distance_km, interferer_powers, eps_mui,
-                            tamper=(tamper_at == n), auth_key=auth_key)
+                            tamper=(tamper_at == n), auth_key=auth_key,
+                            prev_codebook=prev_codebook)
         rounds.append(rr)
         if n == 1:
             # bootstrap: auth key AND code seed come out of K_0
@@ -211,6 +250,7 @@ def run_loop(n_rounds: int, k0_bits: int, cfg_cv: CVQKDConfig,
         # rolling: round n+1 authenticates under a sub-key of round n's key
         auth_key = kdf_expand(rr.extras["seed"], TAG_AUTH, 32)
         seed_bytes = kdf_expand(rr.extras["seed"], TAG_SEED, 32)
+        prev_codebook = rr.codebook
 
     return dict(rounds=rounds, aborted_at=None, keys=keys, k0_left=k0_left,
                 reason="completed")
@@ -232,4 +272,6 @@ def loop_summary(result: dict) -> dict:
                 min_surplus=float(min(r.extras["surplus"] for r in rounds)),
                 xi_mui=rounds[0].xi_mui,
                 rate_per_symbol=rounds[0].rate_per_symbol,
+                code_model=rounds[0].extras.get("code_model", "unknown"),
+                refresh_fraction=rounds[0].extras.get("refresh_fraction", 1.0),
                 auth_ok_all=all(r.auth_ok for r in rounds))
