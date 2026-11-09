@@ -43,29 +43,84 @@ from .config import BudgetConfig
 # --------------------------------------------------------------------------- #
 # authentication
 # --------------------------------------------------------------------------- #
-def auth_key_bits(cfg: BudgetConfig, eps_auth: float = 1e-12) -> dict:
-    """Key material for one authenticated message in the chosen MAC model."""
+def auth_key_bits(cfg: BudgetConfig, eps_auth: float = 1e-12,
+                  n_messages: int | None = None) -> dict:
+    """Key material for authenticated messages in the chosen MAC model.
+
+    Why the cost is fractional
+    --------------------------
+    Under ``axu`` the key is ``l = t + 2*log2(1/eps)`` bits and serves up to
+    ``r`` messages, so the **amortised** cost per message is ``l / r`` -- a
+    fraction of a bit.  That is legitimate arithmetic, not a rounding error: a
+    208-bit key genuinely covers a million messages.
+
+    ``r_effective`` -- the amortisation must not be fiction
+    ------------------------------------------------------
+    An earlier version amortised over ``mac_reuse_limit`` (2^20) while the loop
+    re-derived the key **every round**, so the real reuse was only
+    ``n_messages`` per round (667).  Amortising over 2^20 then understated the
+    cost by a factor ``r/n_messages`` ~ 1572.
+
+    Passing ``n_messages`` makes the amortisation match the actual key
+    lifetime:
+
+        r_effective = min(mac_reuse_limit, n_messages)
+        per_message = l / r_effective
+        per_round   = l                      (one fresh key per round)
+
+    so ``per_round`` is exactly what must be derived.  When ``n_messages`` is
+    omitted the old (loose) behaviour is kept, and the returned ``per_round``
+    assumes the key really does last ``r`` messages.
+    """
     t = float(cfg.tag_bits)
     if cfg.mac_model == "otp":
         per_msg = t
         key_len = t
         reuse = 1
+        if n_messages is not None:
+            # OTP keys are never reused: one key per message.
+            per_msg = t
     elif cfg.mac_model == "axu":
         key_len = t + 2.0 * math.log2(1.0 / eps_auth)
         # reuse must not erode the tag term: r * 2^{-t} <= eps_auth
         max_reuse = max(1, int(math.floor(eps_auth * 2.0 ** t)))
         reuse = int(min(cfg.mac_reuse_limit, max_reuse))
+        if n_messages is not None:
+            reuse = int(max(1, min(reuse, int(n_messages))))
         per_msg = key_len / reuse
     else:
         raise ValueError(f"unknown mac_model {cfg.mac_model!r}")
+    n = int(n_messages) if n_messages is not None else reuse
+    if n_messages is not None:
+        # One key is good for ``reuse`` messages; a batch needing more must
+        # spend a *whole* key per full ``reuse`` messages (ceil, not a
+        # fractional key).  Without this the API silently under-charges for
+        # n_messages > reuse.
+        n_keys = max(1, int(math.ceil(n / float(reuse))))
+        per_round = float(n_keys * key_len)
+    else:
+        n_keys = max(1, int(math.ceil(n / float(reuse))))
+        per_round = float(n_keys * key_len)
     return dict(per_message=float(per_msg), key_length=float(key_len),
-                tag_bits=t, reuse=int(reuse))
+                tag_bits=t, reuse=int(reuse), r_effective=int(reuse),
+                n_keys=int(n_keys), per_round=per_round,
+                n_messages=(None if n_messages is None else int(n_messages)))
 
 
 def auth_bits(n_messages: int, cfg: BudgetConfig,
               eps_auth: float = 1e-12) -> float:
-    """Total authentication-key bits for ``n_messages`` messages."""
-    return float(max(int(n_messages), 0) * auth_key_bits(cfg, eps_auth)["per_message"])
+    """Total authentication-key bits for ``n_messages`` messages.
+
+    A key serves at most ``reuse`` messages, and keys cannot be split, so the
+    cost is ``ceil(n / reuse) * key_length``.  This is exact for every
+    ``n_messages``; the old form ``n * (l / reuse)`` agreed only when ``n`` was
+    an exact multiple of ``reuse`` and under-charged otherwise.
+    """
+    n = max(int(n_messages), 0)
+    if n == 0:
+        return 0.0
+    info = auth_key_bits(cfg, eps_auth, n_messages=n)
+    return float(info["n_keys"] * info["key_length"])
 
 
 def messages_for_traffic(total_bits: float, bits_per_message: int) -> int:
@@ -119,7 +174,11 @@ def round_auth_bits(n_symbols: int, i_ab_bits_per_symbol: float,
                     cfg: BudgetConfig, bits_per_message: int = 1 << 20,
                     n_control_messages: int = 8,
                     eps_auth: float = 1e-12) -> float:
-    """Authentication-key bits consumed by one round."""
+    """Authentication-key bits consumed by one round.
+
+    One fresh MAC key per round, so this is the *full* ``l = t+2log2(1/eps)``,
+    not the amortised-per-message figure (see :func:`auth_key_bits`).
+    """
     n_msg = round_message_count(n_symbols, i_ab_bits_per_symbol, cfg,
                                 bits_per_message, n_control_messages)
     return auth_bits(n_msg, cfg, eps_auth)
@@ -219,6 +278,39 @@ def k0_lifetime_rounds(cfg: BudgetConfig, n_symbols: int,
     per_round = (round_auth_bits(n_symbols, i_ab_bits_per_symbol, cfg, **kw)
                  + float(cfg.seed_bits))
     return float(cfg.k0_bits / per_round) if per_round > 0 else np.inf
+
+
+def k0_ring_budget(cfg: BudgetConfig, n_symbols: int,
+                   i_ab_bits_per_symbol: float,
+                   n_roots: int | None = None,
+                   bootstrap_rounds: int = 1, **kw) -> dict:
+    """Size a *ring* of pre-shared roots instead of a single ``K_0``.
+
+    Holding several roots is the cheap way to survive a bootstrap failure: if
+    round 1's authentication fails, that root may have been exposed, so it is
+    burned and the next root is used instead of requiring an offline
+    re-bootstrap.  Each root must independently cover the bootstrap cost, so
+    the total scales linearly with the ring size::
+
+        total = n_roots * (per_round_auth + seed + reserve)
+
+    Parameters
+    ----------
+    n_roots
+        Ring size; defaults to ``cfg.n_k0_roots``.
+    """
+    n_roots = int(cfg.n_k0_roots if n_roots is None else n_roots)
+    if n_roots < 1:
+        raise ValueError("n_roots must be >= 1")
+    one = k0_budget(cfg, n_symbols, i_ab_bits_per_symbol,
+                    bootstrap_rounds=bootstrap_rounds, **kw)
+    total = one["required"] * n_roots
+    return dict(per_root=one["required"], n_roots=n_roots, total=total,
+                per_root_detail=one,
+                additional_over_single=total - one["required"],
+                # surviving one failure costs exactly one extra root
+                cost_of_one_failure=one["required"])
+
 
 
 # --------------------------------------------------------------------------- #

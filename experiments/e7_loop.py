@@ -9,6 +9,11 @@ Panel 3: the bootstrap cost K_0 as a function of distance and control-message
          count: it is negligible compared with the round key, which is the
          quantitative answer to "how much trust does round 0 really need?"
 
+Also reported: the K_0 **root ring** -- holding a few pre-shared roots lets a
+failed bootstrap burn one root and retry instead of requiring an offline
+re-bootstrap.  It is a small, model-external robustness feature (one extra root
+per tolerated failure), and it does not change any steady-state number.
+
 Outputs
 -------
 results/figures/e7_loop.png
@@ -21,7 +26,7 @@ import numpy as np
 
 from _common import dump, header, rate_at, scenario
 
-from qcdma_qkd import attack, budget, loop, mui, plotting
+from qcdma_qkd import attack, budget, cvqkd, loop, mui, plotting
 
 
 def main() -> dict:
@@ -59,6 +64,47 @@ def main() -> dict:
           f"({100 * k0['fraction_of_k0']:.3f}%)")
     print(f"  tamper at round 8 -> aborted at {tampered['aborted_at']}, "
           f"reason: {tampered['reason']}")
+
+    # --- K_0 root ring: burn-and-retry instead of an offline re-bootstrap --- #
+    ring_n = 3
+    ring = loop.run_loop(n_rounds, k0_bits=2 ** 20, cfg_cv=cfg, cfg_cdma=cdma,
+                         cfg_bud=bcfg, distance_km=25.0, n_symbols=n_symbols,
+                         tamper_at=1, tamper_events=1,
+                         n_k0_roots=ring_n, recover=True)
+    ring_budget = budget.k0_ring_budget(bcfg, n_symbols,
+                                        res["rounds"][0].extras["I_AB"],
+                                        n_roots=ring_n)
+    print(f"  root ring ({ring_n} roots): one-off round-1 tamper -> "
+          f"aborted={ring['aborted_at']}, burned={ring['roots_burned']}, "
+          f"remaining={ring['roots_remaining']}")
+    print(f"    ring cost = {ring_budget['total']:.1f} bit "
+          f"(+{ring_budget['additional_over_single']:.1f} vs a single root)")
+
+    # --- failure-mode envelope: where does each abort condition bite? ------ #
+    # F2 (budget) is *deterministic*: u_n < 0.  On SHORT blocks the fixed
+    # 256-bit seed, not the quantum rate, sets the reach -- so the model's
+    # validity depends on the block length and that must be reported.
+    def budget_limit_km(n: float) -> float:
+        lo, hi = 0.0, 300.0
+        for _ in range(50):
+            mid = 0.5 * (lo + hi)
+            got = loop.run_loop(1, k0_bits=2 ** 20, cfg_cv=cfg, cfg_cdma=cdma,
+                                cfg_bud=bcfg, distance_km=mid, n_symbols=int(n),
+                                eps_mui=1e-12)
+            if got["aborted_at"] is None:
+                lo = mid
+            else:
+                hi = mid
+        return lo
+
+    sym_grid = [10 ** 4, 10 ** 5, 10 ** 6, 10 ** 7, 10 ** 8]
+    budget_limits = [budget_limit_km(n) for n in sym_grid]
+    rate_limit = cvqkd.max_distance(cfg, xi_mui)
+    print("  F2 envelope (u_n>=0) vs block length, rate limit "
+          f"= {rate_limit:.1f} km:")
+    for n, d in zip(sym_grid, budget_limits):
+        tag = "  <- budget binds first" if d < rate_limit - 0.5 else ""
+        print(f"    n={n:.0e}: {d:5.1f} km{tag}")
 
     # --- plot -------------------------------------------------------------- #
     fig, axes = plotting.plt.subplots(1, 3, figsize=(13.4, 3.5))
@@ -113,6 +159,12 @@ def main() -> dict:
                 k0=k0, k0_trace=k0_trace,
                 tampered_aborted_at=tampered["aborted_at"],
                 tampered_reason=tampered["reason"],
+                k0_ring_n=ring_n, k0_ring=ring_budget,
+                k0_ring_recovered=bool(ring["aborted_at"] is None),
+                k0_ring_burned=list(ring["roots_burned"]),
+                f2_symbol_grid=list(sym_grid),
+                f2_budget_limit_km=list(budget_limits),
+                f2_rate_limit_km=float(rate_limit),
                 n_symbols=n_symbols, distance_km=25.0)
 
 

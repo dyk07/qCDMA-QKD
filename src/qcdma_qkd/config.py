@@ -182,8 +182,13 @@ class BudgetConfig:
     seed_bits: int = 256
 
     # bootstrap
-    k0_bits: int = 2 ** 20       # pre-shared authentication root
+    k0_bits: int = 2 ** 20       # size of ONE pre-shared authentication root
     k0_reserve_frac: float = 0.1
+    # Number of pre-shared roots held in reserve (a *ring*).  Round 1 consumes
+    # root 0; on failure that root is **burned** (it may have been exposed) and
+    # the next one takes over, so the system recovers without an offline
+    # re-bootstrap.  ``1`` reproduces the original single-root behaviour.
+    n_k0_roots: int = 1
 
 
 @dataclass

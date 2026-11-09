@@ -1,0 +1,94 @@
+# Baseline for tools/doc_check.py AUDIT.
+#
+# Every 'number + unit' written in docs/ must appear here, so that a new
+# factual number cannot slip in unnoticed.  Each entry is one *distinct*
+# fingerprint; a quantity quoted in several places is listed once.
+#
+# When this file changes, the diff IS the review: for each new line ask
+#   (a) does it come from results/data/*.json?  -> add a CLAIM in
+#       doc_check.py instead, so it becomes drift-checked; or
+#   (b) is it an input/constant (wavelength, tag length, ...) that cannot
+#       drift?  -> leave it here.
+#
+# Regenerate with:  python tools/doc_check.py --update
+
+0 km
+0.0692 SNU
+0.1128 bit/symbol
+0.2 dB
+0.589 bit/symbol
+0.6608 bit/symbol
+1 Gchip/s
+1 Mbit
+1 kbit
+1 km
+10 Mbit
+10 bit
+10 kbit
+10 km
+100 km
+100 ms
+102.4 s
+1020.2 bit
+108.8 km
+110 kbit
+113 Mbit
+128 bit
+142 kbit
+1530.3 bit
+19.5 bit
+190 kbit
+20 km
+20.5 km
+2048 bit
+207.7 bit
+207.726 bit
+21 km
+221 kbit
+233.5 km
+25 Gchip/s
+25 km
+253.9 km
+254 km
+2550.5 bit
+256 bit
+260 km
+260.5 km
+265.9 km
+283 kbit
+3.260 Mbit
+3.272 Mbit
+3.284 Mbit
+3.297 Mbit
+3.33 Mbit
+3.333 Mbit
+32 bit
+32.1 kbit
+34.9 km
+35 km
+37.9 km
+4.31 Mbit
+4.5 km
+42 kbit
+42.1 kbit
+463.7 bit
+47.7 km
+5 km
+50 kbit
+50 km
+51 bit
+510.1 bit
+6.4 Gbit
+6.4 bit
+6.4 bit/symbol
+6.4 km
+62.5 km
+645 kbit
+647 bit
+68.7 km
+69 km
+7.86 kbit
+70 km
+8 bit
+80 bit
+8192 bit

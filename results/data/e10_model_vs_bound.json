@@ -1,0 +1,192 @@
+{
+  "distance_km": 25.0,
+  "n_symbols": 100000000,
+  "L": 1024,
+  "n_interferers": 7,
+  "mui": [
+    {
+      "xi_exact": 0.03957210081456516,
+      "xi_gaussian": 0.02420477068122853,
+      "xi_bound": 0.053026488891091406,
+      "gaussian_is_safe": false,
+      "bound_is_safe": true,
+      "gaussian_gap": -0.38833748567830473,
+      "bound_gap": 0.33999681087373923,
+      "exact_is_closed_form": true,
+      "eps_mui": 1e-06
+    },
+    {
+      "xi_exact": 0.054565215893292086,
+      "xi_gaussian": 0.028751698166160227,
+      "xi_bound": 0.07083490290623749,
+      "gaussian_is_safe": false,
+      "bound_is_safe": true,
+      "gaussian_gap": -0.4730764334848937,
+      "bound_gap": 0.29816957097287866,
+      "exact_is_closed_form": true,
+      "eps_mui": 1e-09
+    },
+    {
+      "xi_exact": 0.06917819898117773,
+      "xi_gaussian": 0.03253967613972636,
+      "xi_bound": 0.0879657626560596,
+      "gaussian_is_safe": false,
+      "bound_is_safe": true,
+      "gaussian_gap": -0.5296252776314706,
+      "bound_gap": 0.27158214512051204,
+      "exact_is_closed_form": true,
+      "eps_mui": 1e-12
+    },
+    {
+      "xi_exact": 0.08357028488346048,
+      "xi_gaussian": 0.035853313867764094,
+      "xi_bound": 0.10466362789189781,
+      "gaussian_is_safe": false,
+      "bound_is_safe": true,
+      "gaussian_gap": -0.5709801167034207,
+      "bound_gap": 0.25240243033576104,
+      "exact_is_closed_form": true,
+      "eps_mui": 1e-15
+    }
+  ],
+  "xi_mui_used": 0.06917819898117773,
+  "xi_mui_bound": 0.0879657626560596,
+  "entropy": [
+    {
+      "entropy_mean": 204.8,
+      "entropy_tail": 149.0,
+      "entropy_lost": 55.80000000000001,
+      "eps_mean": 2.233864816500142e-62,
+      "eps_tail": 1.401298464324817e-45,
+      "p_chip": 0.05,
+      "k_mean": 51.2,
+      "k_star": 107.0
+    },
+    {
+      "entropy_mean": 153.6,
+      "entropy_tail": 80.0,
+      "entropy_lost": 73.6,
+      "eps_mean": 5.77820127822035e-47,
+      "eps_tail": 8.271806125530277e-25,
+      "p_chip": 0.1,
+      "k_mean": 102.4,
+      "k_star": 176.0
+    },
+    {
+      "entropy_mean": 51.19999999999999,
+      "entropy_tail": 0.0,
+      "entropy_lost": 51.19999999999999,
+      "eps_mean": 3.8660211178870574e-16,
+      "eps_tail": 1.0,
+      "p_chip": 0.2,
+      "k_mean": 204.8,
+      "k_star": 256.0
+    }
+  ],
+  "seed_bits": 256,
+  "eps_entropy": 1e-12,
+  "refresh": [
+    {
+      "eps_code": 1e-06,
+      "f_min_rigorous": 0.76904296875,
+      "f_min_legacy": 0.7694644224309807,
+      "f_min_mean": 0.7694644224309807,
+      "k_star": 236,
+      "p_exceed": 0.0,
+      "p_guess": 9.5367431640625e-07,
+      "eps_total": 9.5367431640625e-07
+    },
+    {
+      "eps_code": 1e-09,
+      "f_min_rigorous": 0.77880859375,
+      "f_min_legacy": 0.779196633646471,
+      "f_min_mean": 0.779196633646471,
+      "k_star": 226,
+      "p_exceed": 0.0,
+      "p_guess": 9.313225746154785e-10,
+      "eps_total": 9.313225746154785e-10
+    },
+    {
+      "eps_code": 1e-12,
+      "f_min_rigorous": 0.78857421875,
+      "f_min_legacy": 0.7889288448619612,
+      "f_min_mean": 0.7889288448619612,
+      "k_star": 216,
+      "p_exceed": 0.0,
+      "p_guess": 9.094947017729282e-13,
+      "eps_total": 9.094947017729282e-13
+    },
+    {
+      "eps_code": 1e-15,
+      "f_min_rigorous": 0.79833984375,
+      "f_min_legacy": 0.7986610560774516,
+      "f_min_mean": 0.7986610560774516,
+      "k_star": 206,
+      "p_exceed": 0.0,
+      "p_guess": 8.881784197001252e-16,
+      "eps_total": 8.881784197001252e-16
+    }
+  ],
+  "pe": [
+    {
+      "T_lb_gaussian": 0.25729130108622156,
+      "T_lb_exact": 0.26010436706612644,
+      "xi_ub_gaussian": 0.17178778483233303,
+      "xi_ub_exact": 0.4577089458890127,
+      "T_gaussian_is_safe": true,
+      "xi_gaussian_is_safe": false,
+      "gaussian_is_safe": false,
+      "modulus": 1.0941953517558547,
+      "n_pe": 10000
+    },
+    {
+      "T_lb_gaussian": 0.2759676427732156,
+      "T_lb_exact": 0.27653197461619805,
+      "xi_ub_gaussian": 0.10162619908680151,
+      "xi_ub_exact": 0.18959478620710435,
+      "T_gaussian_is_safe": true,
+      "xi_gaussian_is_safe": false,
+      "gaussian_is_safe": false,
+      "modulus": 1.029193784227523,
+      "n_pe": 100000
+    },
+    {
+      "T_lb_gaussian": 0.2818736205822609,
+      "T_lb_exact": 0.28201807096038645,
+      "xi_ub_gaussian": 0.07943915756629326,
+      "xi_ub_exact": 0.10701389452465015,
+      "T_gaussian_is_safe": true,
+      "xi_gaussian_is_safe": false,
+      "gaussian_is_safe": false,
+      "modulus": 1.009172881886463,
+      "n_pe": 1000000
+    },
+    {
+      "T_lb_gaussian": 0.2837412547509603,
+      "T_lb_exact": 0.28378348434865347,
+      "xi_ub_gaussian": 0.07242299899174011,
+      "xi_ub_exact": 0.08111860377638891,
+      "T_gaussian_is_safe": true,
+      "xi_gaussian_is_safe": false,
+      "gaussian_is_safe": false,
+      "modulus": 1.00289483043168,
+      "n_pe": 10000000
+    }
+  ],
+  "rate": {
+    "asymptotic": 0.05181209477208004,
+    "finite_nominal": 0.041135985215038216,
+    "finite_with_pe": 0.031638699441087596,
+    "T_used_nominal": 0.28460498941515416,
+    "xi_used_nominal": 0.06917819898117773,
+    "T_used_with_pe": 0.28378348434865347,
+    "xi_used_with_pe": 0.08111860377638891,
+    "finite_over_asymptotic": 0.7939456104987507,
+    "pe_over_finite": 0.7691246307994426
+  },
+  "prf": {
+    "prf_advantage_128bit": 256.0,
+    "distinguishing_advantage_1e9_queries": 2.938735877055719e-39,
+    "note": "toy bound only: no proof that BLAKE2b is a PRF"
+  }
+}

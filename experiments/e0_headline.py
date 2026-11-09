@@ -41,16 +41,30 @@ def main() -> dict:
                 max_distance_with_mui=cvqkd.max_distance(cfg, xi_req))
 
     # --- authentication ----------------------------------------------------- #
+    # The budget numbers must come from the SAME rate model the closed loop
+    # uses (finite-size with the PE sample removed), otherwise the headline
+    # K_n and the simulated K_n disagree.
     n_symbols = 10 ** 8
     sym_rate = cdma.symbol_rate()
-    i_ab25 = rate_at(cfg, 25.0, xi_req)["I_AB"]
-    b = budget.round_budget(rate_at(cfg, 25.0, xi_req)["S_pos"] * n_symbols,
-                            n_symbols, i_ab25, bcfg)
+    T25 = cvqkd.total_transmittance(25.0, cfg.alpha_db_per_km, cfg.eta)
+    asym25 = cvqkd.asymptotic_rate(cfg.V_A, T25, cfg.excess_noise + xi_req,
+                                   cfg.eta, cfg.v_el, cfg.beta, cfg.detection)
+    fin25 = cvqkd.finite_size_rate(cfg.V_A, T25, cfg.excess_noise + xi_req,
+                                   cfg.eta, cfg.v_el, cfg.beta, cfg.detection,
+                                   n_symbols=n_symbols, eps_sm=sec.eps_sm,
+                                   eps_pa=sec.eps_pa,
+                                   sample_fraction=bcfg.pe_sample_fraction)
+    i_ab25 = fin25["I_AB"]
+    b = budget.round_budget(fin25["S_pos"] * n_symbols, n_symbols, i_ab25, bcfg)
     snap.update(round_symbols=n_symbols,
                 round_seconds=n_symbols / sym_rate,
                 chip_rate=cdma.chip_rate,
                 symbol_rate=sym_rate,
+                rate_25km_with_mui_asym=asym25["S_pos"],
+                rate_25km_with_mui_finite=fin25["S_pos"],
+                finite_size_factor=fin25["S_pos"] / asym25["S_pos"],
                 key_bits_per_round=b["K"],
+                key_bits_per_round_asym=asym25["S_pos"] * n_symbols,
                 auth_bits_per_round=b["a"],
                 auth_messages_per_round=b["n_messages"],
                 seed_bits=b["c"],
@@ -102,10 +116,18 @@ def main() -> dict:
         0.01 * cfg.excess_noise, cfg.V_A, 1024)
 
     # --- epsilon ------------------------------------------------------------ #
+    # ``epsb.total()`` is a **per-round** budget.  Composing it over N rounds
+    # requires dividing the per-round budget by ~N; composing a single
+    # component (the old 1e-12) understated the total by ~300x.
     epsb = security.from_config(sec)
-    snap.update(eps_total=epsb.total(), eps_target=sec.eps_total,
-                eps_pass=bool(epsb.total() <= sec.eps_total),
-                eps_sequential_1e4=security.compose_sequential(1e-12, 10 ** 4))
+    eps_round = epsb.total()
+    snap.update(eps_total=eps_round, eps_target=sec.eps_total,
+                eps_pass=bool(eps_round <= sec.eps_total),
+                eps_max_rounds=security.max_rounds(eps_round, sec.eps_total),
+                eps_round_required_1e4=security.required_round_eps(
+                    10 ** 4, sec.eps_total),
+                eps_sequential_1e4=security.compose_over_rounds(
+                    eps_round, 10 ** 4))
 
     # --- loop --------------------------------------------------------------- #
     lr = loop.run_loop(10, 2 ** 20, cfg, cdma, bcfg, 25.0, n_symbols=n_symbols)

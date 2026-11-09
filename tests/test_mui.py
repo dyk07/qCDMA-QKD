@@ -101,3 +101,54 @@ def test_more_chips_suppress_mui():
     kappa = mui.uniform_kappa(7, 1.0)
     assert mui.xi_block_mean(kappa, 4096) == pytest.approx(
         mui.xi_block_mean(kappa, 1024) / 4.0)
+
+
+# --------------------------------------------------------------------------- #
+# the rigorous bound must actually dominate the exact quantile
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("K", [2, 7, 15])
+@pytest.mark.parametrize("eps", [1e-6, 1e-9, 1e-12, 1e-15])
+def test_laurent_massart_bound_dominates_the_exact_quantile(K, eps):
+    """The bound is a theorem and must never fall below the truth.
+
+    Regression: writing the two log terms with coefficient 1 instead of 2 gives
+    0.0435 vs the exact 0.0540 at K=2, eps=1e-12 -- i.e. a "bound" that is
+    violated.  This test is the guard against mis-copying the constants.
+    """
+    kap = mui.uniform_kappa(K, 1.0)
+    L = 1024
+    bound = mui.xi_block_bound(eps, kap, L)
+    exact = mui.xi_block_exact(eps, kap, L)
+    assert bound >= exact, (
+        f"bound {bound:.5f} < exact {exact:.5f} at K={K}, eps={eps:g}")
+
+
+@pytest.mark.parametrize("eps", [1e-6, 1e-12])
+def test_gaussian_quantile_is_documented_as_unsafe(eps):
+    """The Gaussian fit is a model and errs optimistically in the tail.
+
+    If this ever starts passing as "safe", the docs' warning is wrong and must
+    be revised -- so the assertion is that it is *not* safe, at these settings.
+    """
+    kap = mui.uniform_kappa(7, 1.0)
+    d = mui.xi_gap_vs_bound(eps, kap, 1024)
+    assert d["exact_is_closed_form"]
+    assert not d["gaussian_is_safe"]
+    assert d["gaussian_gap"] < -0.2          # understates by more than 20%
+    assert d["bound_is_safe"]
+
+
+def test_exact_quantile_matches_chi2_for_equal_power():
+    """Equal kappa -> xi_block * L / kappa is exactly chi^2_K."""
+    from scipy import stats
+    K, L, eps = 7, 1024, 1e-12
+    want = stats.chi2.ppf(1 - eps, df=K) / L
+    assert mui.xi_block_exact(eps, mui.uniform_kappa(K, 1.0), L) == pytest.approx(want)
+
+
+def test_bound_holds_for_unequal_power_too():
+    """The Gamma route is only approximate when kappa differs; the bound is not."""
+    kap = np.array([1.0, 0.5, 0.2, 1.5, 0.9, 0.3, 0.7])
+    d = mui.xi_gap_vs_bound(1e-12, kap, 1024)
+    assert not d["exact_is_closed_form"]
+    assert d["bound_is_safe"]

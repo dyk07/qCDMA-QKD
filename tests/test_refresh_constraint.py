@@ -273,3 +273,69 @@ def test_max_chips_per_seed_bit_inverts_the_constraint():
         L_max = ratio * SEED
         known = (1.0 - f) * L_max * p
         assert known == pytest.approx(SEED - K_REQ, rel=1e-9)
+
+
+# --------------------------------------------------------------------------- #
+# the seed entropy must be quoted at an upper tail, not at the mean
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("p_chip", [0.05, 0.10, 0.20])
+def test_tail_entropy_never_exceeds_mean_entropy(p_chip):
+    """H_min is a worst-case quantity, so the tail version must be <= the mean.
+
+    Using the mean leakage credits Eve with fewer chips than her upper tail, so
+    it *overstates* the surviving entropy -- and every lost bit doubles the
+    guessing probability.
+    """
+    d = attack.entropy_gap_vs_tail(256, 1024, p_chip, 1e-12)
+    assert d["entropy_tail"] <= d["entropy_mean"]
+    if d["entropy_lost"] > 0:
+        assert d["eps_tail"] > d["eps_mean"]
+
+
+def test_mean_based_entropy_understates_leakage_by_many_orders():
+    """Quantify the model error so the docs' claim is pinned.
+
+    09_model_vs_bound.md asserts 1e15..1e22; keep that claim honest.
+    """
+    for p_chip in (0.05, 0.10):
+        d = attack.entropy_gap_vs_tail(256, 1024, p_chip, 1e-12)
+        ratio = d["eps_tail"] / d["eps_mean"]
+        assert 1e15 <= ratio <= 1e23, (p_chip, ratio)
+
+
+def test_tail_entropy_goes_to_zero_when_the_tail_saturates():
+    """At p=0.2 the upper tail already exhausts the seed while the mean does not.
+
+    This is the sharpest illustration of why the mean is not safe: 51 bit of
+    apparent headroom at the mean, none at confidence 1-1e-12.
+    """
+    d = attack.entropy_gap_vs_tail(256, 1024, 0.20, 1e-12)
+    assert d["entropy_mean"] > 0
+    assert d["entropy_tail"] == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# the refresh constraint must charge the guessing term too
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("eps_code", [1e-6, 1e-9, 1e-12, 1e-15])
+def test_rigorous_refresh_constraint_is_a_two_term_union_bound(eps_code):
+    """eps_code <= P(k > k*) + 2^{-(seed-k*)} must hold at the returned f_min.
+
+    Regression: the tail-only version set the second term to zero, which is
+    optimistic -- it treated "used up the chip budget" as if it were "guessed
+    the seed".
+    """
+    c = attack.refresh_constraint_tail(256, 1024, 1.0, eps_code)
+    assert c["violation"] <= eps_code * (1 + 1e-9)
+    assert c["violation"] == pytest.approx(c["p_exceed"] + c["p_guess"],
+                                           abs=1e-30)
+    # and both terms are reported, so the split stays visible
+    assert c["p_guess"] > 0
+    assert c["k_star"] <= c["k_max_allowed"]
+
+
+def test_rigorous_f_min_is_close_to_but_not_above_the_documented_value():
+    """The published 0.7886 must equal the rigorous value, not the legacy one."""
+    c = attack.refresh_constraint_tail(256, 1024, 1.0, 1e-12)
+    assert c["f_min"] == pytest.approx(0.78857, abs=5e-5)
+    assert c["f_min"] != pytest.approx(c["f_min_legacy"], abs=1e-9)

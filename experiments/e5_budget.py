@@ -32,20 +32,30 @@ def main() -> dict:
     xi_mui = mui.required_xi(1e-12, kappa, cdma.spreading_factor)
 
     dist = np.arange(5.0, 125.0, 2.5)
-    clean = budget.budget_vs_distance(dist, rate_fn(cfg, symbol_rate, 0.0),
+    fin_kw = dict(eps_sm=sc["sec"].eps_sm, eps_pa=sc["sec"].eps_pa,
+                  sample_fraction=bcfg.pe_sample_fraction)
+    # finite-size rates: the loop uses these, so the budget picture must too
+    clean = budget.budget_vs_distance(dist, rate_fn(cfg, symbol_rate, 0.0,
+                                                    n_symbols, **fin_kw),
                                       bcfg, n_symbols, symbol_rate)
-    withmui = budget.budget_vs_distance(dist, rate_fn(cfg, symbol_rate, xi_mui),
+    withmui = budget.budget_vs_distance(dist, rate_fn(cfg, symbol_rate, xi_mui,
+                                                      n_symbols, **fin_kw),
                                         bcfg, n_symbols, symbol_rate)
 
-    # phase diagram: how many authenticated messages per round can we afford?
-    # u >= 0  <=>  a(n_msg) + seed <= K  <=>  n_msg <= (K - seed) / cost_per_msg
-    per_msg = budget.auth_key_bits(bcfg)["per_message"]
+    # Phase diagram: how many authenticated messages per round can we afford?
+    #   u >= 0  <=>  a(n_msg) + seed <= K
+    # A key serves up to ``reuse`` messages and keys are not splittable, so the
+    # marginal cost of one more *round* is a whole ``key_length``, NOT the
+    # amortised ``per_message`` (which is l/reuse and would overstate the
+    # affordable count by a factor reuse ~ 1572).
+    per_round_auth = budget.auth_key_bits(bcfg)["key_length"]
     msg_grid = np.array([8, 32, 128, 512, 2048, 8192])
     affordable = []
     for L in dist:
-        k_bits = rate_at(cfg, float(L), xi_mui)["S_pos"] * n_symbols
-        affordable.append((k_bits - bcfg.seed_bits) / per_msg)
-    affordable = np.asarray(affordable)
+        k_bits = rate_at(cfg, float(L), xi_mui, n_symbols, **fin_kw)["S_pos"] * n_symbols
+        affordable.append(int((k_bits - bcfg.seed_bits)
+                              // per_round_auth) * budget.auth_key_bits(bcfg)["reuse"])
+    affordable = np.asarray(affordable, dtype=float)
     # feasibility matrix: message demand (rows) vs supply (distance)
     phase = (msg_grid[:, None] <= affordable[None, :]).astype(float)
 
@@ -53,7 +63,7 @@ def main() -> dict:
     lens = np.array([1e6, 1e7, 1e8, 1e9])
     ovh = []
     for n in lens:
-        r = rate_at(cfg, 25.0, xi_mui)
+        r = rate_at(cfg, 25.0, xi_mui, n, **fin_kw)
         k = r["S_pos"] * n
         ovh.append(budget.overhead_ratio(int(n), r["I_AB"], k, bcfg))
 
@@ -105,7 +115,9 @@ def main() -> dict:
 
     return dict(dist=dist, clean=clean, with_mui=withmui, xi_mui=xi_mui,
                 msg_grid=msg_grid, phase=phase, affordable=affordable,
-                per_msg_bits=per_msg, lens=lens, overhead=ovh)
+                per_message_bits=budget.auth_key_bits(bcfg)["per_message"],
+                per_round_auth_bits=per_round_auth,
+                lens=lens, overhead=ovh)
 
 
 if __name__ == "__main__":

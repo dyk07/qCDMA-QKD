@@ -426,10 +426,101 @@ def required_xi(eps_mui: float, kappa: np.ndarray, L: int) -> float:
 
 
 def required_xi_normal(eps_mui: float, kappa: np.ndarray, L: int) -> float:
-    """Gaussian (CLT) approximation to :func:`required_xi`, for comparison."""
+    """Gaussian (CLT) approximation to :func:`required_xi`, for comparison.
+
+    **This is a model, not a bound.**  ``xi_block`` is a weighted sum of
+    ``chi^2_1`` variables, which is skewed; a Gaussian quantile is *below* the
+    true quantile in the tail, i.e. it is anti-conservative.  Quantify the gap
+    with :func:`xi_gap_vs_bound`; never provision with this value.
+    """
     mu = xi_block_mean(kappa, L)
     sd = xi_block_std(kappa, L)
     return float(mu + stats.norm.isf(float(eps_mui)) * sd)
+
+
+# --------------------------------------------------------------------------- #
+# rigorous (distribution-free) upper bound on the eps-quantile
+# --------------------------------------------------------------------------- #
+def xi_block_bound(eps_mui: float, kappa: np.ndarray, L: int) -> float:
+    r"""Laurent-Massart upper bound on the ``1 - eps`` quantile of xi_block.
+
+    ``xi_block = sum_j a_j z_j^2`` with ``a_j = kappa_j / L`` and
+    ``z_j ~ N(0,1)`` i.i.d., i.e. a weighted sum of ``chi^2_1``.  Laurent &
+    Massart (2000) give, for every ``x > 0``,
+
+        P( sum_j a_j (z_j^2 - 1) >= 2 ||a||_2 sqrt(x) + 2 a_max x ) <= e^{-x},
+
+    hence with probability at least ``1 - eps``::
+
+        xi_block  <=  mean + 2 ||a||_2 sqrt(ln(1/eps)) + 2 a_max ln(1/eps)
+
+    This is a **theorem**, not a fit: no distributional assumption beyond
+    independent Gaussians, no moment matching.  It is looser than the exact
+    ``chi^2`` quantile (which is available for the equal-``kappa`` case) but
+    valid for arbitrary ``kappa``, and it is *tighter* than Markov on the
+    second moment.
+
+    Why this matters
+    ----------------
+    :func:`required_xi` evaluates the exact quantile through a moment-matched
+    Gamma; :func:`required_xi_normal` is a Gaussian fit.  Neither carries a
+    proof, so a paper statement like "with probability ``1 - eps_MUI`` the
+    excess noise is at most X" is only defensible through this function (or the
+    exact ``chi^2`` route when the interferers are equal).  Reported alongside
+    as the conservative design value -- see ``docs/09_model_vs_bound.md``.
+    """
+    if not 0.0 < eps_mui < 1.0:
+        raise ValueError("eps_mui must be in (0, 1)")
+    a = np.atleast_1d(np.asarray(kappa, dtype=float)) / float(L)
+    a = a[a > 0]
+    if a.size == 0:
+        return 0.0
+    x = float(np.log(1.0 / eps_mui))
+    return float(a.sum() + 2.0 * np.linalg.norm(a) * np.sqrt(x)
+                 + 2.0 * a.max() * x)
+
+
+def xi_block_exact(eps_mui: float, kappa: np.ndarray, L: int) -> float:
+    """Exact ``1 - eps`` quantile of ``xi_block``.
+
+    For **equal** ``kappa`` the sum ``L * xi_block / kappa`` is ``chi^2_K``, so
+    the quantile is available in closed form.  For unequal weights there is no
+    elementary closed form; this falls back to the moment-matched Gamma, which
+    is an approximation (flagged in the returned ``kind``).
+    """
+    k = np.atleast_1d(np.asarray(kappa, dtype=float))
+    k = k[k > 0]
+    if k.size == 0:
+        return 0.0
+    if np.allclose(k, k[0]):
+        return float(stats.chi2.ppf(1.0 - eps_mui, df=k.size) * k[0] / L)
+    return xi_block_quantile(1.0 - eps_mui, k, L)
+
+
+def xi_gap_vs_bound(eps_mui: float, kappa: np.ndarray, L: int) -> dict:
+    """Compare the three routes to the eps-quantile of ``xi_block``.
+
+    Returns the exact quantile (closed form when possible), the Gaussian fit,
+    and the rigorous Laurent-Massart bound, plus the relative gaps.  The
+    ``gaussian_is_safe`` flag is the practically important one: if it is False,
+    the Gaussian figure understates the excess noise and would overstate the
+    key rate.
+    """
+    exact = xi_block_exact(eps_mui, kappa, L)
+    gauss = required_xi_normal(eps_mui, kappa, L)
+    bound = xi_block_bound(eps_mui, kappa, L)
+    k = np.atleast_1d(np.asarray(kappa, dtype=float))
+    k = k[k > 0]
+    return dict(
+        xi_exact=float(exact),
+        xi_gaussian=float(gauss),
+        xi_bound=float(bound),
+        gaussian_is_safe=bool(gauss >= exact),
+        bound_is_safe=bool(bound >= exact),
+        gaussian_gap=(float(gauss / exact - 1.0) if exact > 0 else np.nan),
+        bound_gap=(float(bound / exact - 1.0) if exact > 0 else np.nan),
+        exact_is_closed_form=bool(k.size > 0 and np.allclose(k, k[0])),
+    )
 
 
 def xi_overshoot_cost(eps_mui: float, kappa: np.ndarray, L: int,

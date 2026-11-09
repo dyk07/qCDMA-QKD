@@ -94,3 +94,57 @@ def test_transmittance_conventions():
     # 10 km at 0.2 dB/km = 2 dB -> 10**(-2/10) = 10**(-0.2)
     assert cvqkd.total_transmittance(10.0, 0.2, eta) == pytest.approx(
         eta * 10 ** (-0.2))
+
+
+# --------------------------------------------------------------------------- #
+# PE bounds: the exact chi-square route must dominate the Gaussian one
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("n_pe", [10 ** 4, 10 ** 6, 10 ** 7])
+def test_exact_pe_noise_bound_dominates_the_gaussian_one(n_pe):
+    """A sample variance is chi-square, not Gaussian.
+
+    Regression: the Gaussian interval is *narrower* on the xi coordinate, i.e.
+    it understates the excess noise and therefore overstates the key rate.
+    This test pins that direction so the docs warning cannot rot.
+    """
+    cfg = CVQKDConfig()
+    T = cvqkd.total_transmittance(25.0, cfg.alpha_db_per_km, cfg.eta)
+    d = cvqkd.pe_gap_vs_exact(T, 0.0692, n_pe, 1e-10, cfg.eta, cfg.V_A, cfg.v_el)
+    assert d["xi_ub_exact"] >= d["xi_ub_gaussian"], (
+        "the Gaussian PE bound is supposed to be the anti-conservative one")
+    assert not d["xi_gaussian_is_safe"]
+    assert d["modulus"] >= 1.0
+
+
+def test_exact_pe_bounds_tighten_with_more_samples():
+    """More PE samples must narrow both bounds monotonically."""
+    cfg = CVQKDConfig()
+    T = cvqkd.total_transmittance(25.0, cfg.alpha_db_per_km, cfg.eta)
+    prev = None
+    for n_pe in (10 ** 4, 10 ** 5, 10 ** 6, 10 ** 7):
+        e = cvqkd.pe_confidence_intervals_exact(T, 0.0692, n_pe, 1e-10,
+                                                cfg.eta, cfg.V_A, cfg.v_el)
+        if prev is not None:
+            assert e["xi_ub"] <= prev["xi_ub"] + 1e-12
+            assert e["T_lb"] >= prev["T_lb"] - 1e-12
+        prev = e
+
+
+def test_finite_size_rate_with_pe_bounds_is_below_nominal():
+    """Feeding the confidence bounds must not increase the rate.
+
+    The nominal-parameter rate is an upper bound on the achievable rate: the
+    real protocol does not know T and xi, only intervals for them.
+    """
+    cfg = CVQKDConfig()
+    T = cvqkd.total_transmittance(25.0, cfg.alpha_db_per_km, cfg.eta)
+    a = cvqkd.finite_size_rate(cfg.V_A, T, 0.0692, cfg.eta, cfg.v_el, cfg.beta,
+                         cfg.detection, n_symbols=10 ** 8, eps_sm=1e-10,
+                         eps_pa=1e-12, sample_fraction=0.1)
+    b = cvqkd.finite_size_rate(cfg.V_A, T, 0.0692, cfg.eta, cfg.v_el, cfg.beta,
+                         cfg.detection, n_symbols=10 ** 8, eps_sm=1e-10,
+                         eps_pa=1e-12, sample_fraction=0.1, eps_pe=1e-10)
+    assert b["S_pos"] <= a["S_pos"]
+    assert b["pe_applied"] and not a["pe_applied"]
+    assert b["T_used"] <= a["T_used"]
+    assert b["xi_used"] >= a["xi_used"]

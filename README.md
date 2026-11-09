@@ -11,18 +11,36 @@ q-CDMA-CV-QKD 中**码分发闭环**的研究实现：把"CDMA 码如何安全�
 ```bash
 pip install numpy scipy matplotlib pytest
 
-python -m pytest                 # 79 项：物理极限 + 统计一致性 + 单位约定
-python experiments/run_all.py    # E0–E9，约 6 秒
+python experiments/run_all.py    # E0–E9，约 6 秒（先跑这个，产出 JSON）
+python -m pytest                 # 187 项：物理极限 + 统计一致性 + 单位约定 + 文档一致性
+python tools/doc_check.py        # 单独检查 docs/ 的数字是否仍等于 results/data/
 ```
 
 产出：
 - `results/figures/*.png` — E1–E9 九张图
-- `results/data/*.json` — 全部数值（文档数字的**唯一来源**；改代码后重跑 E0）
+- `results/data/*.json` — 全部数值（文档数字的**唯一来源**；改代码后重跑 E0（即 `run_all.py`））
+
+### 为什么有 `tools/doc_check.py`
+
+本项目曾三次出现"代码改对了、文档里的数字没跟上、但所有测试仍然全绿"：
+认证成本停在摊销值 `0.132 bit`（实际每轮换钥，应为 `207.7 bit`）、
+闭环停在渐近速率（实际已切到有限码长，`4.31` → `3.33` Mbit）、
+$\epsilon$ 组合仍在引用旧的轮数上限。
+**单元测试看不见散文。**
+
+该脚本把 `results/data/*.json` 当作唯一真值，断言：
+1. 文献中每个关键数字都能从 JSON 重新算出来（`CLAIMS`）；
+2. 已废弃的数值不得再出现（`RETIRED`），除非该行显式在讨论历史。
+
+`tests/test_docs_consistency.py` 把这两条接进 `pytest`，因此文档漂移会直接
+**让 CI 变红**，而不是等读者发现。
 
 ## 目录结构
 
 ```
 qCDMA-QKD/
+├── tools/
+│   └── doc_check.py            文档数字 ↔ results/data 一致性校验
 ├── docs/                       研究文档（README.md 是索引）
 │   ├── initial.md              原始论文提纲（需求基线，不改动）
 │   ├── 00_summary.md           核心结论与关键数字

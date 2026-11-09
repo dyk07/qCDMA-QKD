@@ -743,10 +743,14 @@
       "k_max_allowed": 88.13686286135166,
       "f_min": 0.91357421875,
       "feasible": true,
-      "violation": 0.0,
+      "violation": 9.094947017729282e-13,
+      "k_star": 88,
+      "p_exceed": 0.0,
+      "p_guess": 9.094947017729282e-13,
       "binds": true,
+      "f_min_legacy": 0.9139288448619612,
       "f_min_mean": 0.9139288448619612,
-      "note": "exact binomial tail constraint at eps_code target"
+      "note": "rigorous: eps_code <= P(k>k*) + 2^{-(seed-k*)}, k* optimised per refresh fraction"
     },
     "256": {
       "seed_bits": 256,
@@ -757,10 +761,14 @@
       "k_max_allowed": 216.13686286135166,
       "f_min": 0.78857421875,
       "feasible": true,
-      "violation": 0.0,
+      "violation": 9.094947017729282e-13,
+      "k_star": 216,
+      "p_exceed": 0.0,
+      "p_guess": 9.094947017729282e-13,
       "binds": true,
+      "f_min_legacy": 0.7889288448619612,
       "f_min_mean": 0.7889288448619612,
-      "note": "exact binomial tail constraint at eps_code target"
+      "note": "rigorous: eps_code <= P(k>k*) + 2^{-(seed-k*)}, k* optimised per refresh fraction"
     },
     "512": {
       "seed_bits": 512,
@@ -771,10 +779,14 @@
       "k_max_allowed": 472.13686286135163,
       "f_min": 0.53857421875,
       "feasible": true,
-      "violation": 0.0,
+      "violation": 9.094947017729282e-13,
+      "k_star": 472,
+      "p_exceed": 0.0,
+      "p_guess": 9.094947017729282e-13,
       "binds": true,
+      "f_min_legacy": 0.5389288448619614,
       "f_min_mean": 0.5389288448619614,
-      "note": "exact binomial tail constraint at eps_code target"
+      "note": "rigorous: eps_code <= P(k>k*) + 2^{-(seed-k*)}, k* optimised per refresh fraction"
     }
   },
   "chosen_model": "prf",

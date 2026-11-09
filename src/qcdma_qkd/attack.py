@@ -131,7 +131,7 @@ def chip_success_probability(observation_snr: float, L: int,
 
 def residual_seed_entropy(seed_bits: int, L: int, p_chip: float,
                           model: str = "extractor") -> float:
-    """Min-entropy of the code seed remaining to Eve.
+    """Min-entropy of the code seed remaining to Eve, at the **mean** leakage.
 
     ``extractor`` (information-theoretic, e.g. Toeplitz / one-time-pad style):
         every correctly estimated chip is one linear constraint on the seed.
@@ -141,7 +141,13 @@ def residual_seed_entropy(seed_bits: int, L: int, p_chip: float,
             H_min = max(0, seed_bits - k),      k ~ Binomial(L, p_chip)
 
         so the seed is fully exposed once Eve gets ``seed_bits`` chips right.
-        We use the mean ``k = p_chip * L`` (concentration is tight at L ~ 1e3).
+
+    **This uses the mean ``k = p_chip * L`` and is therefore only a model.**
+    ``H_min`` is a *minimum over outcomes*, so it must be quoted at an upper
+    tail of ``k``, not at its mean: the mean describes the typical case, and a
+    security statement about the typical case is vacuous.  Use
+    :func:`residual_seed_entropy_tail` for anything that enters a security
+    claim; the gap is quantified by :func:`entropy_gap_vs_tail`.
 
     ``prf`` (computational PRF): output bits do not leak seed bits, so
 
@@ -155,6 +161,64 @@ def residual_seed_entropy(seed_bits: int, L: int, p_chip: float,
         raise ValueError(f"unknown model {model!r}")
     k = float(p_chip) * float(L)
     return float(max(0.0, seed_bits - k))
+
+
+def residual_seed_entropy_tail(seed_bits: int, L: int, p_chip: float,
+                               eps_entropy: float = 1e-12,
+                               model: str = "extractor") -> float:
+    r"""Min-entropy of the code seed at rigorous confidence ``1 - eps``.
+
+    ``k ~ Binomial(L, p_chip)`` is random.  A statement of the form
+    "with probability at least ``1 - eps_entropy`` Eve knows at most ``k_star``
+    chips" requires ``k_star`` to be an **upper** quantile:
+
+        k_star = min{ k : P(Binomial(L, p_chip) > k) <= eps_entropy }
+
+    and then ``H_min`` is defined by that worst case::
+
+        H_min^{eps} = max(0, seed_bits - k_star)
+
+    Using the mean instead (as :func:`residual_seed_entropy` does) understates
+    the leakage, i.e. **overstates** the surviving entropy and hence the
+    security.  The difference is small for ``L p`` far from both 0 and
+    ``seed_bits`` but it is the difference between a model and a bound, and it
+    only ever goes one way.
+
+    ``model="prf"`` behaves as in :func:`residual_seed_entropy`.
+    """
+    from scipy import stats
+
+    if model == "prf":
+        return float(seed_bits)
+    if model != "extractor":
+        raise ValueError(f"unknown model {model!r}")
+    if not 0.0 < eps_entropy < 1.0:
+        raise ValueError("eps_entropy must be in (0, 1)")
+    n, p = int(L), float(np.clip(p_chip, 0.0, 1.0))
+    if n <= 0 or p <= 0.0:
+        return float(seed_bits)
+    if p >= 1.0:
+        return float(max(0.0, seed_bits - n))
+    # smallest k with P(X > k) <= eps  <=>  P(X <= k) >= 1 - eps
+    k_star = float(stats.binom.ppf(1.0 - eps_entropy, n, p))
+    k_star = max(k_star, float(n * p))          # never below the mean
+    return float(max(0.0, seed_bits - k_star))
+
+
+def entropy_gap_vs_tail(seed_bits: int, L: int, p_chip: float,
+                        eps_entropy: float = 1e-12) -> dict:
+    """Mean-based vs tail-based surviving seed entropy (the size of the model error).
+
+    ``entropy_lost`` is how many *more* bits Eve is credited with at confidence
+    ``1 - eps`` than at the mean.  Because ``eps_code = 2^{-H_min}``, each lost
+    bit multiplies the guessing probability by 2.
+    """
+    mean_h = residual_seed_entropy(seed_bits, L, p_chip)
+    tail_h = residual_seed_entropy_tail(seed_bits, L, p_chip, eps_entropy)
+    return dict(entropy_mean=float(mean_h), entropy_tail=float(tail_h),
+                entropy_lost=float(mean_h - tail_h),
+                eps_mean=float(eps_code_from_entropy(mean_h)),
+                eps_tail=float(eps_code_from_entropy(tail_h)))
 
 
 def eps_code_from_entropy(h_min: float, security_margin_bits: float = 0.0) -> float:
@@ -315,32 +379,38 @@ def refresh_security_constraint(seed_bits: int, L: int,
 def refresh_constraint_tail(seed_bits: int, L: int, p_blind: float = 1.0,
                             eps_code: float = 1e-12,
                             tol: float = 1e-4) -> dict:
-    r"""Default refresh constraint: exact binomial **tail**, eps_code target.
+    r"""Rigorous refresh constraint: binomial **tail** *plus* the entropy term.
 
-    This is the rigorous form and should be preferred over the closed form.
+    What the previous version got right and what it missed
+    ------------------------------------------------------
+    It already used an ``eps_code`` target rather than the degenerate
+    ``H_min > 0`` test, and it already used the binomial tail rather than the
+    mean of ``k_known``.  What it missed is that the tail event and the
+    guessing probability are **two different things**:
 
-    Two corrections over :func:`refresh_security_constraint`
-    -------------------------------------------------------
-    (a) **eps target, not H_min > 0.**  The tail event of interest is that Eve
-        consumes the whole security margin, not merely the whole seed:
+    * ``P(k_known >= k_max)`` is the probability that Eve exceeds her chip
+      budget.  Conditioning on that event says nothing about how *likely* she
+      is to then guess the seed -- and if she has ``k_max`` chips she has
+      consumed the entire security margin, so the conditional guessing
+      probability is essentially 1.
+    * ``2^{-(seed - k)}`` is the guessing probability **given** ``k`` chips.
 
-            k_known >= seed_bits - k_req,      k_req = log2(1/eps_code)
+    A sound statement must add them::
 
-    (b) **Tail, not mean.**  ``k_known ~ Binomial(round((1-f) L), p_blind)`` is
-        random; constraining its mean leaves the upper tail uncontrolled.
+        eps_code(f) <= P(k > k*) + 2^{-(seed - k*)}       for every k*
+        so choose k* to minimise this (the two terms trade off one chip at a
+        time: the first falls, the second doubles).
 
-    The solver is therefore
+    Only using the first term silently sets the second to zero, which is exactly
+    what makes ``f_min`` land at ``1 - k_max/L``; only using the second term
+    (the mean-based route) silently sets the first to zero.  Both are wrong in
+    the *optimistic* direction.  This function does the union bound properly.
 
-        f_min = min{ f : P(k_known >= seed_bits - k_req) <= eps_code_tail }
+    The resulting ``f_min`` is slightly **larger** than the old
+    ``1 - (k_max)/L`` because the optimum ``k*`` is a little below ``k_max``.
 
-    where ``eps_code_tail`` is split from the budget: we require the tail
-    probability itself to be at most ``eps_code``, which is then a *total*
-    variation distance of the same order.
-
-    Numbers (seed=256, L=1024, p=1, eps=1e-12): ``k_req = 39.9``, so at most
-    216.1 chips may be known, giving ``f_min = 1 - 216.1/1024 = 0.789`` --
-    versus 0.75 under the old ``H_min > 0`` rule, whose actual eps_code at
-    f = 0.75 is 1.0 (total loss).
+    Returns a dict including ``k_star`` (the optimised chip count),
+    ``p_exceed`` and ``p_guess`` so the split between the two terms is visible.
     """
     from scipy import stats
 
@@ -349,7 +419,7 @@ def refresh_constraint_tail(seed_bits: int, L: int, p_blind: float = 1.0,
     if not 0.0 < eps_code <= 1.0:
         raise ValueError("eps_code must be in (0, 1]")
     k_req = required_entropy_bits(eps_code)
-    k_max = seed_bits - k_req          # chips may be known without violating eps
+    k_max = seed_bits - k_req          # chips that would consume all the margin
     p = float(np.clip(p_blind, 0.0, 1.0))
     base = dict(seed_bits=int(seed_bits), L=int(L), p_blind=p,
                 eps_code=eps_code, k_req=k_req, k_max_allowed=float(k_max))
@@ -360,39 +430,57 @@ def refresh_constraint_tail(seed_bits: int, L: int, p_blind: float = 1.0,
 
     if p <= 0.0:
         return {**base, "f_min": 0.0, "feasible": True, "violation": 0.0,
-                "note": "p_blind = 0: no leakage"}
+                "k_star": 0, "note": "p_blind = 0: no leakage"}
 
-    def violation(f: float) -> float:
-        """P(k_known >= k_max) for a refresh fraction f."""
+    def eps_of(f: float, k_star: int | None = None) -> tuple[float, int, float, float]:
+        """(eps_code, k*, P(k>k*), 2^{-(seed-k*)}) for a refresh fraction f."""
         n_reused = int(round((1.0 - f) * L))
-        # known chips cannot exceed the reused chips
-        if n_reused <= k_max:
-            return 0.0
-        if p >= 1.0:
-            return 1.0
-        return float(stats.binom.sf(np.ceil(k_max) - 1, n_reused, p))
+        # A chip that is not refreshed carries over from the previous code; the
+        # leaked chips are therefore capped by min(n_reused, k_star).
+        k_hi = min(int(k_star if k_star is not None else n_reused), n_reused)
+        lo_k, best = 0, None
+        # optimise k* over the reachable range (the sum is convex: the binomial
+        # tail falls with k*, the guessing term doubles)
+        for k in range(lo_k, k_hi + 1):
+            p_exc = (0.0 if n_reused <= k
+                     else (1.0 if p >= 1.0
+                           else float(stats.binom.sf(k, n_reused, p))))
+            p_gue = float(min(1.0, 2.0 ** (-(seed_bits - k))))
+            tot = p_exc + p_gue
+            if best is None or tot < best[0]:
+                best = (tot, k, p_exc, p_gue)
+        assert best is not None
+        return best
 
-    if violation(1.0) > eps_code:
-        return {**base, "f_min": 1.0, "feasible": False,
-                "violation": violation(1.0),
-                "note": "no refresh rate satisfies the tail condition"}
-    if violation(0.0) <= eps_code:
-        return {**base, "f_min": 0.0, "feasible": True,
-                "violation": violation(0.0), "binds": False,
-                "note": "tail condition already met without refreshing"}
+    e1 = eps_of(1.0)
+    if e1[0] > eps_code:
+        return {**base, "f_min": 1.0, "feasible": False, "violation": e1[0],
+                "k_star": e1[1], "p_exceed": e1[2], "p_guess": e1[3],
+                "note": "no refresh rate satisfies the bound; even f = 1 loses "
+                        "the seed (2^{-seed} exceeds the target)"}
+    e0 = eps_of(0.0)
+    if e0[0] <= eps_code:
+        return {**base, "f_min": 0.0, "feasible": True, "violation": e0[0],
+                "k_star": e0[1], "p_exceed": e0[2], "p_guess": e0[3],
+                "binds": False,
+                "note": "bound already met without refreshing"}
 
     lo, hi = 0.0, 1.0
     while hi - lo > tol:
         mid = 0.5 * (lo + hi)
-        if violation(mid) > eps_code:
+        if eps_of(mid)[0] > eps_code:
             lo = mid
         else:
             hi = mid
-    return {**base, "f_min": float(hi), "feasible": True,
-            "violation": violation(hi), "binds": True,
+    e = eps_of(hi)
+    return {**base, "f_min": float(hi), "feasible": True, "violation": e[0],
+            "k_star": e[1], "p_exceed": e[2], "p_guess": e[3], "binds": True,
+            "f_min_legacy": float(np.clip(
+                1.0 - (k_max) / (L * p) if L * p > 0 else 1.0, 0.0, 1.0)),
             "f_min_mean": float(refresh_security_constraint(
                 seed_bits, L, p, eps_code)["f_min"]),
-            "note": "exact binomial tail constraint at eps_code target"}
+            "note": ("rigorous: eps_code <= P(k>k*) + 2^{-(seed-k*)}, k* "
+                     "optimised per refresh fraction")}
 
 
 def max_chips_per_seed_bit(seed_bits: int, refresh_fraction: float,

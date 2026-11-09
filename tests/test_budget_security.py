@@ -19,12 +19,18 @@ from qcdma_qkd.config import BudgetConfig, CDMAConfig, CVQKDConfig, SecurityConf
 # authentication cost
 # --------------------------------------------------------------------------- #
 def test_auth_cost_does_not_scale_with_message_bits():
-    """A MAC over 1 Mbit must cost the same key as a MAC over 1 kbit."""
+    """A MAC over 1 Mbit must cost the same key as a MAC over 1 kbit.
+
+    The cost is a function of the *message count* only, and saturates at one
+    key length ``l`` because a single eps-AXU key serves many messages.
+    """
     cfg = BudgetConfig()
     one = budget.auth_bits(1, cfg)
     assert one > 0
-    # 100 messages cost exactly 100x one message (no bit-length term)
-    assert budget.auth_bits(100, cfg) == pytest.approx(100 * one)
+    # no bit-length term anywhere: the API has no such parameter at all
+    info = budget.auth_key_bits(cfg)
+    assert budget.auth_bits(100, cfg) == pytest.approx(info["key_length"])
+    assert budget.auth_bits(10_000, cfg) == pytest.approx(info["key_length"])
 
 
 def test_otp_costs_more_than_axu():
@@ -202,3 +208,92 @@ def test_kdf_domains_are_independent():
     k = loop.split_key(10 ** 6, BudgetConfig(), overhead_bits=1000)
     assert k["a"] != k["c"] != k["u"]
     assert k["u_bits"] == pytest.approx(10 ** 6 - 1000 - 256)
+
+
+# --------------------------------------------------------------------------- #
+# regression: auth billing must not under-charge, and per_round must be real
+# --------------------------------------------------------------------------- #
+def test_per_round_is_one_full_key_per_round_in_every_mac_model():
+    """``per_round`` is what must be *derived*, so it is n_keys * key_length.
+
+    Regression: the OTP branch returned ``key_length`` (128 bit) regardless of
+    the message count, so a 667-message round was billed as one message.
+    """
+    for model in ("axu", "otp"):
+        cfg = BudgetConfig(mac_model=model)
+        info = budget.auth_key_bits(cfg, n_messages=667)
+        assert info["per_round"] == pytest.approx(
+            info["n_keys"] * info["key_length"])
+        if model == "otp":
+            assert info["per_round"] == pytest.approx(667 * 128.0)
+
+
+def test_billing_rounds_up_to_whole_keys_beyond_one_key_lifetime():
+    """n > reuse must cost a whole extra key, not a fractional one.
+
+    Regression: ``auth_bits`` divided by ``reuse`` once, so
+    ``reuse + 1`` messages were billed as a single key.
+    """
+    cfg = BudgetConfig()
+    r = budget.auth_key_bits(cfg)["reuse"]
+    l = budget.auth_key_bits(cfg)["key_length"]
+    assert budget.auth_bits(r, cfg) == pytest.approx(l)
+    assert budget.auth_bits(r + 1, cfg) == pytest.approx(2 * l)
+    assert budget.auth_bits(int(2.5 * r), cfg) == pytest.approx(3 * l)
+
+
+def test_auth_epsilon_is_not_multiplied_by_the_message_count():
+    """The eps-AXU bound already charges for reuse; do not double count.
+
+    ``eps <= r 2^{-t} + 2^{-(l-t)/2}`` with one fresh key per round and
+    ``n_msg = 667 <= r`` gives exactly ``eps``.  Multiplying by the message
+    count (the old ``eps_auth_rounds=4``) counted reuse twice.
+    """
+    sec = SecurityConfig()
+    one = security.from_config(sec)
+    assert one.eps_auth == pytest.approx(sec.eps_auth)
+    assert one.total() < sec.eps_total
+
+
+
+
+def test_round_composition_cannot_use_a_single_component():
+    """Composing a per-round budget must use the whole budget, not one term.
+
+    Regression: the docs composed ``1e-12`` (authentication alone), dropping
+    eps_qkd/eps_sm/eps_pe (1e-10 each) and understating the composed epsilon by
+    ~300x at N=1e4.
+    """
+    sec = SecurityConfig()
+    eps_round = security.from_config(sec).total()
+    # eps_round is dominated by the 1e-10 terms, not by 1e-12
+    assert eps_round > 3 * 1e-10
+    composed = security.compose_over_rounds(eps_round, 10 ** 4)
+    assert composed > 10 ** 2 * security.compose_over_rounds(1e-12, 10 ** 4)
+    # and the honest round budget is tiny
+    assert security.max_rounds(eps_round, sec.eps_total) < 5.0
+    assert security.required_round_eps(10 ** 4, sec.eps_total) <= 2e-12
+    # and the three helpers must agree with each other
+    for n in (1, 3, 10, 1000, 10 ** 4):
+        worst = security.compose_over_rounds(eps_round, n)
+        need = security.required_round_eps(n, sec.eps_total)
+        assert (worst <= sec.eps_total) == (eps_round <= need), (
+            f"compose/required disagree at N={n}")
+
+
+def test_composition_uses_the_tighter_of_the_two_bounds():
+    """Both the union and sequential forms are upper bounds; take the min.
+
+    The sequential form is vacuous for small N (sqrt(2N ln 1/delta) > N), so
+    quoting it alone at N=1 would report 7.4x more than is provable.
+    """
+    sec = SecurityConfig()
+    er = security.from_config(sec).total()
+    for n in (1, 2, 10, 50, 1000):
+        best = security.compose_over_rounds(er, n)
+        assert best <= security.compose_over_rounds(er, n, "union")
+        # the sequential form carries an additive eps_delta, so at very small
+        # N it can exceed eps_round itself; the point is only that "best"
+        # never exceeds *both* bounds
+        assert best <= max(security.compose_over_rounds(er, n, "union"),
+                           security.compose_over_rounds(er, n, "sequential"))

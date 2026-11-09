@@ -75,16 +75,23 @@ def test_pe_fraction_and_k0_reserve_are_not_the_auth_ratio():
     cfg = BudgetConfig()
     assert cfg.pe_sample_fraction == 0.1      # parameter-estimation disclosure
     assert cfg.k0_reserve_frac == 0.1         # bootstrap failure reserve
-    # the real auth ratio is orders of magnitude away from 0.1
-    assert _fraction("axu") < 1e-6
+    # the real auth ratio is far below 0.1 (see test_auth_fraction_* for the
+    # corrected values: one fresh 208-bit MAC key per round)
+    assert _fraction("axu") < 1e-3
     assert _fraction("otp") < 0.05
 
 
 # --------------------------------------------------------------------------- #
 # measured values
 # --------------------------------------------------------------------------- #
-def test_axu_auth_fraction_is_negligible():
-    assert _fraction("axu") == pytest.approx(3.1e-8, rel=0.05)
+def test_axu_auth_fraction_is_one_key_per_round():
+    """One fresh MAC key per round, so the cost is the *full* l = t+2log2(1/eps).
+
+    An earlier version amortised over ``mac_reuse_limit`` (2^20) while the loop
+    re-derived the key every round, understating the cost by ~1572x.  The real
+    figure is ~208 bit/round -> a/K = 4.8e-5, still negligible.
+    """
+    assert _fraction("axu") == pytest.approx(4.82e-5, rel=0.05)
 
 
 def test_otp_auth_fraction_is_about_two_percent():
@@ -108,6 +115,8 @@ def test_closed_form_matches_measurement():
     B = 1 << 20
     predicted = l * (pe_per_symbol + cfg.recon_leak_factor * I_AB) / (B * S_POS)
     assert predicted == pytest.approx(0.0196, rel=0.02)
+    # note: OTP has reuse=1, so its per-round cost is n_msg*l and the closed
+    # form above (which uses one l per *message*) is the right one
     # matches the simulator at a long block
     assert _fraction("otp", n_symbols=10 ** 9) == pytest.approx(
         predicted, rel=0.02)
@@ -162,5 +171,6 @@ def test_wegman_carter_key_length_is_message_independent():
     info = budget.auth_key_bits(cfg, eps_auth=1e-12)
     t = info["tag_bits"]
     assert info["key_length"] == pytest.approx(t + 2 * math.log2(1 / 1e-12))
-    # and the per-message amortised cost carries no bits-of-message variable
-    assert budget.auth_bits(500, cfg) == pytest.approx(500 * info["per_message"])
+    # 500 messages are still served by ONE key, so the cost saturates at l
+    assert budget.auth_bits(500, cfg) == pytest.approx(info["key_length"])
+    assert budget.auth_bits(50_000, cfg) == pytest.approx(info["key_length"])

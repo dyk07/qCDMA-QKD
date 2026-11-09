@@ -181,24 +181,39 @@ def pe_penalty(n: int, eps_sm: float, eps_pa: float) -> float:
 def finite_size_rate(V_A: float, T: float, xi: float, eta: float, v_el: float,
                      beta: float, detection: str = "homodyne",
                      n_symbols: int = 10 ** 8, eps_sm: float = 1e-10,
-                     eps_pa: float = 1e-12, sample_fraction: float = 0.1) -> dict:
+                     eps_pa: float = 1e-12, sample_fraction: float = 0.1,
+                     eps_pe: float | None = None) -> dict:
     """Finite-size secret-key rate in bits per *total* symbol.
 
     n_symbols  : total exchanged symbols (including PE samples)
     sample_fraction : fraction of symbols used for parameter estimation
+    eps_pe     : if given, the rate is evaluated at the *PE confidence bounds*
+                 (``T_lb``, ``xi_ub`` computed with the exact chi-square method)
+                 instead of the nominal ``T`` and ``xi``.
+
+    The ``eps_pe`` switch matters: the nominal-parameter rate is what the
+    textbook AEP formula returns, but a real protocol only knows ``T`` and
+    ``xi`` to within a confidence interval.  Feeding the **upper/lower** bounds
+    is the conservative choice, and it is what makes the claimed ``eps_pe``
+    actually appear in the security statement instead of being decorative.
     """
     n_pe = int(sample_fraction * n_symbols)
     n = n_symbols - n_pe                      # symbols usable for the key
     if n <= 0:
         return dict(S=0.0, S_pos=0.0, n_key_symbols=0, I_AB=0.0, chi_BE=0.0,
-                    Delta=0.0, overhead=0.0)
-    base = asymptotic_rate(V_A, T, xi, eta, v_el, beta, detection)
+                    Delta=0.0, overhead=0.0, T_used=float(T), xi_used=float(xi))
+    T_used, xi_used = float(T), float(xi)
+    if eps_pe is not None:
+        pe = pe_confidence_intervals_exact(T, xi, n_pe, eps_pe, eta, V_A, v_el)
+        T_used, xi_used = pe["T_lb"], pe["xi_ub"]
+    base = asymptotic_rate(V_A, T_used, xi_used, eta, v_el, beta, detection)
     delta = aep_penalty(n, eps_sm)
     core = beta * base["I_AB"] - base["chi_BE"] - delta
     overhead = pe_penalty(n, eps_sm, eps_pa) / n_symbols
     s = (n / n_symbols) * core - overhead
     return dict(S=s, S_pos=max(s, 0.0), n_key_symbols=n, I_AB=base["I_AB"],
-                chi_BE=base["chi_BE"], Delta=delta, overhead=overhead)
+                chi_BE=base["chi_BE"], Delta=delta, overhead=overhead,
+                T_used=T_used, xi_used=xi_used, pe_applied=eps_pe is not None)
 
 
 # --------------------------------------------------------------------------- #
@@ -206,7 +221,7 @@ def finite_size_rate(V_A: float, T: float, xi: float, eta: float, v_el: float,
 # --------------------------------------------------------------------------- #
 def pe_confidence_intervals(T: float, xi: float, n_pe: int, eps_pe: float = 1e-10,
                             sample_fraction: float = 0.1) -> dict:
-    """Conservative PE bounds.
+    """Conservative PE bounds (**normal approximation**, kept for comparison).
 
     Uses a normal approximation on the empirical variance of the PE sample:
     the relative standard error of a variance estimate from n_pe samples is
@@ -214,6 +229,12 @@ def pe_confidence_intervals(T: float, xi: float, n_pe: int, eps_pe: float = 1e-1
     z = sqrt(2 ln(1/eps_pe)):
         xi_ub   = xi + z * sqrt(2/n_pe) * (1 + xi)
         T_lb    = T  * (1 - z * sqrt(2/n_pe))
+
+    **This is a model.**  A sample variance is ``chi^2``-distributed, not
+    Gaussian, and the Gaussian quantile is *below* the true one in the tail --
+    so these bounds are anti-conservative exactly where it matters.  Use
+    :func:`pe_confidence_intervals_exact` for anything that enters a security
+    claim; the gap is quantified by :func:`pe_gap_vs_exact`.
     """
     if n_pe <= 0:
         return dict(T_lb=0.0, xi_ub=np.inf, z=np.inf, rel_err=np.inf)
@@ -222,6 +243,76 @@ def pe_confidence_intervals(T: float, xi: float, n_pe: int, eps_pe: float = 1e-1
     return dict(T_lb=max(T * (1.0 - rel), 0.0),
                 xi_ub=xi + rel * (1.0 + xi),
                 z=float(z), rel_err=float(rel))
+
+
+def pe_confidence_intervals_exact(T: float, xi: float, n_pe: int,
+                                  eps_pe: float = 1e-10,
+                                  eta: float = 0.9, V_A: float = 4.0,
+                                  v_el: float = 0.05,
+                                  n_modes: int = 2) -> dict:
+    r"""Exact ``chi^2`` PE confidence bounds.
+
+    Model.  Bob's quadrature measurement of the PE sample has variance
+
+        sigma^2 = eta * (V_A + xi) + v_el        [in SNU, one quadrature]
+
+    built from ``n_pe`` independent symbols.  The sample second moment is then
+
+        S = sigma^2 * chi^2_{n_pe} / n_pe
+
+    so a one-sided lower bound on the excess noise at confidence
+    ``1 - eps_pe`` is::
+
+        sigma^2_ub = sigma^2 * chi^2_{n_pe}(1 - eps_pe) / n_pe
+        xi_ub      = (sigma^2_ub - v_el) / eta - V_A          (>= 0)
+
+    and the transmittance bound follows from the same moment estimate::
+
+        T_lb = T * sigma^2 / sigma^2_ub = T * n_pe / chi^2_{n_pe}(1 - eps_pe)
+
+    ``n_modes`` divides the small ``eps_pe`` budget between the two one-sided
+    bounds (union bound), so each is evaluated at ``eps_pe / n_modes``.  With
+    ``eps_pe = 1e-10`` and ``n_pe = 1e7`` the modulus is ``7.8`` and the exact
+    bound is tighter *and* valid, whereas the Gaussian one is invalid.
+
+    Unlike the Gaussian version this makes no distributional approximation:
+    the ``chi^2`` law of a Gaussian sample variance is exact.
+    """
+    from scipy import stats
+
+    if n_pe <= 0:
+        return dict(T_lb=0.0, xi_ub=np.inf, chi2=None, modulus=np.inf)
+
+    eps_one = float(eps_pe) / float(max(int(n_modes), 1))
+    chi2 = float(stats.chi2.ppf(1.0 - eps_one, df=int(n_pe)))
+    modulus = chi2 / float(n_pe)          # >= 1: how far the upper bound sits
+    # Bob's measured variance at the reference operating point
+    sigma2 = eta * (V_A + xi) + v_el
+    sigma2_ub = sigma2 * modulus
+    xi_ub = max((sigma2_ub - v_el) / eta - V_A, 0.0)
+    return dict(T_lb=float(T / modulus), xi_ub=float(xi_ub),
+                chi2=chi2, modulus=float(modulus), eps_one=eps_one)
+
+
+def pe_gap_vs_exact(T: float, xi: float, n_pe: int, eps_pe: float = 1e-10,
+                    eta: float = 0.9, V_A: float = 4.0,
+                    v_el: float = 0.05) -> dict:
+    """Gaussian PE bound vs the exact ``chi^2`` bound (the size of the model error).
+
+    ``gaussian_is_safe`` is False whenever the Gaussian interval is *narrower*
+    than the exact one, i.e. whenever it would overstate the key rate.  Note the
+    two coordinates can disagree: the Gaussian ``T_lb`` may be conservative
+    while the Gaussian ``xi_ub`` is not.  Check both.
+    """
+    g = pe_confidence_intervals(T, xi, n_pe, eps_pe)
+    e = pe_confidence_intervals_exact(T, xi, n_pe, eps_pe, eta, V_A, v_el)
+    return dict(T_lb_gaussian=g["T_lb"], T_lb_exact=e["T_lb"],
+                xi_ub_gaussian=g["xi_ub"], xi_ub_exact=e["xi_ub"],
+                T_gaussian_is_safe=bool(g["T_lb"] <= e["T_lb"]),
+                xi_gaussian_is_safe=bool(g["xi_ub"] >= e["xi_ub"]),
+                gaussian_is_safe=bool(g["T_lb"] <= e["T_lb"]
+                                      and g["xi_ub"] >= e["xi_ub"]),
+                modulus=e["modulus"])
 
 
 # --------------------------------------------------------------------------- #

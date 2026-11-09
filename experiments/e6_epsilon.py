@@ -39,16 +39,27 @@ def main() -> dict:
           f"{'PASS' if table['total'] <= sec.eps_total else 'FAIL'}")
 
     rounds = np.array([1, 10, 100, 1000, 10 ** 4, 10 ** 5])
-    eps_round = 1e-12
-    seq = np.array([security.compose_sequential(eps_round, int(n)) for n in rounds])
-    uni = np.array([security.compose_sum([eps_round] * int(n)) for n in rounds])
+    # ``eps_round`` must be the WHOLE per-round budget.  Composing the auth
+    # term alone (1e-12) drops eps_qkd/eps_sm/eps_pe (1e-10 each) and
+    # understates the composed total by ~300x at N=1e4.
+    eps_round = table["total"]
+    seq = np.array([security.compose_over_rounds(eps_round, int(n), "sequential")
+                    for n in rounds])
+    uni = np.array([security.compose_over_rounds(eps_round, int(n), "union")
+                    for n in rounds])
+    best = np.array([security.compose_over_rounds(eps_round, int(n)) for n in rounds])
+    n_max = security.max_rounds(eps_round, sec.eps_total)
+    eps_req = security.required_round_eps(10 ** 4, sec.eps_total)
 
     ratios = np.linspace(0.5, 0.99, 50)
     k_bits = 1e7
     lhl = np.array([security.lhl_output_bits(r * k_bits, 1e-12) for r in ratios])
 
-    print(f"  sequential composition over 1e4 rounds: {seq[4]:.2e}  "
-          f"(union bound would give {uni[4]:.2e})")
+    print(f"  per-round total eps          = {eps_round:.2e}")
+    print(f"  composition over 1e4 rounds  = {best[4]:.2e} "
+          f"(union {uni[4]:.2e}, sequential {seq[4]:.2e})")
+    print(f"  max rounds under {sec.eps_total:.0e}     = {n_max:.1f}")
+    print(f"  per-round eps needed for 1e4 = {eps_req:.2e}")
 
     # --- plot -------------------------------------------------------------- #
     fig, axes = plotting.plt.subplots(1, 3, figsize=(12.6, 3.4))
@@ -72,7 +83,8 @@ def main() -> dict:
     ax.set_ylabel(r"$\epsilon_{\mathrm{total}}$")
     ax.set_title("Composition over rounds")
     ax.legend(fontsize=7, loc="lower right")
-    ax.set_ylim(1e-12, 5e-7)
+    lo = max(min(best.min(), sec.eps_total) / 10, 1e-30)
+    ax.set_ylim(lo, max(best.max(), uni.max()) * 10)
 
     ax = axes[2]
     ax.plot(ratios, lhl / 1e6, color="#1e8449", label="extractable")
@@ -88,7 +100,8 @@ def main() -> dict:
 
     return dict(components=components, total=table["total"],
                 target=sec.eps_total, rounds=rounds,
-                eps_sequential=seq, eps_union=uni,
+                eps_sequential=seq, eps_union=uni, eps_best=best,
+                max_rounds=n_max, eps_round_required_1e4=eps_req,
                 ratios=ratios, lhl_bits=lhl, k_bits=k_bits)
 
 

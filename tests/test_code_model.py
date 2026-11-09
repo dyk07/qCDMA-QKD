@@ -115,28 +115,45 @@ BD = BudgetConfig()
 
 def _two_round_codebooks(f: float):
     cfg = CDMAConfig(refresh_fraction=f)
-    res = loop.run_loop(2, 2 ** 20, CV, cfg, BD, 25.0, n_symbols=10 ** 5)
+    # rate_model pinned: the subject is code refresh, not the rate model
+    res = loop.run_loop(2, 2 ** 20, CV, cfg, BD, 25.0, n_symbols=10 ** 5,
+                        rate_model="asymptotic")
     return res["rounds"][0].codebook, res["rounds"][1].codebook
 
 
 @pytest.mark.parametrize("f", [1.0, 0.75, 0.5, 0.0])
 def test_cross_round_correlation_equals_one_minus_f(f):
-    """<c_n, c_{n-1}>/L == 1 - f: this is what makes the constraint meaningful."""
+    """<c_n, c_{n-1}>/L == 1 - f: this is what makes the constraint meaningful.
+
+    Tolerance is the *statistical* scale, not an arbitrary number.  The pooled
+    correlation over ``n_users * L`` chips of independent +-1 sequences has
+    standard deviation ``1/sqrt(n_users * L)``; we allow 4 sigma.
+    """
     c_prev, c_cur = _two_round_codebooks(f)
     measured = float(np.mean([
         codes.normalised_cross_correlation(c_prev[i], c_cur[i])
         for i in range(c_prev.shape[0])
     ]))
-    assert measured == pytest.approx(1.0 - f, abs=0.02)
+    sigma = 1.0 / np.sqrt(c_prev.shape[0] * c_prev.shape[1])
+    assert measured == pytest.approx(1.0 - f, abs=4 * sigma)
 
 
 def test_full_refresh_decorrelates_rounds():
+    """At f=1 the residual correlation must be pure sampling noise.
+
+    Bound: 4 sigma of the pooled correlation, ``4/sqrt(n_users * L)`` (~0.044
+    for 8 users and L=1024).  Anything larger would mean the codes are not
+    actually re-drawn.
+    """
     c_prev, c_cur = _two_round_codebooks(1.0)
     measured = float(np.mean([
         codes.normalised_cross_correlation(c_prev[i], c_cur[i])
         for i in range(c_prev.shape[0])
     ]))
-    assert abs(measured) < 0.03, "f=1 must leave no cross-round correlation"
+    sigma = 1.0 / np.sqrt(c_prev.shape[0] * c_prev.shape[1])
+    assert abs(measured) < 4 * sigma, (
+        f"f=1 left a correlation of {measured:.4f}, beyond 4 sigma "
+        f"({4 * sigma:.4f}); the codes are not being re-drawn")
 
 
 def test_no_refresh_carries_the_code_verbatim():
@@ -145,7 +162,53 @@ def test_no_refresh_carries_the_code_verbatim():
 
 
 def test_loop_summary_reports_the_code_model():
-    res = loop.run_loop(2, 2 ** 20, CV, CDMAConfig(), BD, 25.0, n_symbols=10 ** 5)
+    res = loop.run_loop(2, 2 ** 20, CV, CDMAConfig(), BD, 25.0, n_symbols=10 ** 5,
+                        rate_model="asymptotic")
     s = loop.loop_summary(res)
     assert s["code_model"] == "prf"
     assert s["refresh_fraction"] == 1.0
+
+
+# --------------------------------------------------------------------------- #
+# regression: the refresh randomness must come from the SECRET PRF stream
+# --------------------------------------------------------------------------- #
+def test_refreshed_chips_depend_on_the_secret_seed():
+    """f<1 must still be a function of the seed.
+
+    Regression: the refreshed chips (and the refresh mask) used to be drawn
+    from ``np.random.default_rng(frame)`` -- a public, frame-indexed source
+    independent of ``seed``.  At f<1 the codebook then did not depend on the
+    seed at all: refreshing bought neither secrecy nor decorrelation.
+    """
+    L, n_users = 64, 2
+    base = np.ones((n_users, L))
+    a = loop.derive_codebook(bytes(32), n_users, L, frame=0, base=base,
+                             refresh_fraction=0.5)
+    b = loop.derive_codebook(bytes(range(32)), n_users, L, frame=0, base=base,
+                             refresh_fraction=0.5)
+    assert not np.array_equal(a, b), "refreshed codebook ignores the seed"
+    # ... and the refresh really did change chips relative to the base
+    assert np.any(a != base)
+
+
+@pytest.mark.parametrize("f", [0.25, 0.5, 0.75])
+def test_refresh_mask_has_the_requested_occupancy(f):
+    """The mask must realise f, not a 0/1/1/2 approximation of it.
+
+    Single-bit masks can only express f in {0, 1/2, 1}; that silently rescaled
+    f=0.75 to 50%.
+    """
+    L, n_users = 4096, 4
+    # Two complementary bases: a chip that is NOT refreshed keeps the base
+    # value (so the two runs differ), a chip that IS refreshed comes from the
+    # PRF stream (so the two runs agree).  Comparing against a single base
+    # cannot work, because a fresh +-1 chip coincides with base with prob 1/2.
+    a = loop.derive_codebook(bytes(32), n_users, L, frame=0,
+                             base=np.ones((n_users, L)), refresh_fraction=f)
+    b = loop.derive_codebook(bytes(32), n_users, L, frame=0,
+                             base=-np.ones((n_users, L)), refresh_fraction=f)
+    frac = float(np.mean(a == b))
+    # the refresh mask is shared by all users, so the sampling error of the
+    # realised occupancy is over L chips, not n_users * L
+    sigma = np.sqrt(f * (1 - f) / L)
+    assert frac == pytest.approx(f, abs=4 * sigma)
