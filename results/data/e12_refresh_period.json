@@ -1,0 +1,386 @@
+{
+  "L": 1024,
+  "M": 8,
+  "block_symbols": 100000000,
+  "symbol_rate_hz": 976562.5,
+  "recovery_threshold": 0.999,
+  "seeds": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "kappas": {
+    "equal": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "weak": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.01
+    ]
+  },
+  "rows": [
+    {
+      "refresh_period": 1,
+      "n_frames": 100000000,
+      "n_samples_per_codebook": 1,
+      "recovery_fraction": {
+        "equal": 0.0,
+        "weak": 0.0
+      },
+      "n_found": {
+        "equal": 0,
+        "weak": 0
+      },
+      "err_operator_norm": 4855.244730444283,
+      "lambda_top": 5635.324194953291,
+      "attack_blocked": true,
+      "xi_mean": 0.0068359375,
+      "xi_std": 3.653962291771427e-07,
+      "xi_rel_std": 5.345224838248488e-05,
+      "xi_eps": 0.0068385081906508745,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 8000000000.0,
+      "refresh_rate_hz": 976562.5
+    },
+    {
+      "refresh_period": 10,
+      "n_frames": 10000000,
+      "n_samples_per_codebook": 10,
+      "recovery_fraction": {
+        "equal": 0.0,
+        "weak": 0.0
+      },
+      "n_found": {
+        "equal": 0,
+        "weak": 0
+      },
+      "err_operator_norm": 1545.138284042233,
+      "lambda_top": 2544.9320788790374,
+      "attack_blocked": true,
+      "xi_mean": 0.0068359375,
+      "xi_std": 1.1554843326366436e-06,
+      "xi_rel_std": 0.0001690308509457033,
+      "xi_eps": 0.006844068896197522,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 800000000.0,
+      "refresh_rate_hz": 97656.25
+    },
+    {
+      "refresh_period": 100,
+      "n_frames": 1000000,
+      "n_samples_per_codebook": 100,
+      "recovery_fraction": {
+        "equal": 0.0,
+        "weak": 0.0
+      },
+      "n_found": {
+        "equal": 0,
+        "weak": 0
+      },
+      "err_operator_norm": 461.9165741006571,
+      "lambda_top": 1475.1751735157602,
+      "attack_blocked": true,
+      "xi_mean": 0.0068359375,
+      "xi_std": 3.653962291771427e-06,
+      "xi_rel_std": 0.0005345224838248487,
+      "xi_eps": 0.00686167282368077,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 80000000.0,
+      "refresh_rate_hz": 9765.625
+    },
+    {
+      "refresh_period": 200,
+      "n_frames": 500000,
+      "n_samples_per_codebook": 200,
+      "recovery_fraction": {
+        "equal": 0.0,
+        "weak": 0.0
+      },
+      "n_found": {
+        "equal": 0,
+        "weak": 0
+      },
+      "err_operator_norm": 336.59229726337963,
+      "lambda_top": 1355.0799840276013,
+      "attack_blocked": true,
+      "xi_mean": 0.0068359375,
+      "xi_std": 5.167483029423029e-06,
+      "xi_rel_std": 0.0007559289460184545,
+      "xi_eps": 0.006872351246436483,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 40000000.0,
+      "refresh_rate_hz": 4882.8125
+    },
+    {
+      "refresh_period": 300,
+      "n_frames": 333333,
+      "n_samples_per_codebook": 300,
+      "recovery_fraction": {
+        "equal": 0.0,
+        "weak": 0.0
+      },
+      "n_found": {
+        "equal": 0,
+        "weak": 0
+      },
+      "err_operator_norm": 337.46981315171035,
+      "lambda_top": 1348.460808417232,
+      "attack_blocked": true,
+      "xi_mean": 0.0068359375,
+      "xi_std": 6.3288515027154685e-06,
+      "xi_rel_std": 0.0009258205626829486,
+      "xi_eps": 0.0068805524634563235,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 26666666.666666668,
+      "refresh_rate_hz": 3255.2083333333335
+    },
+    {
+      "refresh_period": 400,
+      "n_frames": 250000,
+      "n_samples_per_codebook": 400,
+      "recovery_fraction": {
+        "equal": 0.5,
+        "weak": 0.5
+      },
+      "n_found": {
+        "equal": 8,
+        "weak": 8
+      },
+      "err_operator_norm": 263.7749056368748,
+      "lambda_top": 1297.3565816635269,
+      "attack_blocked": true,
+      "xi_mean": 0.0068359375,
+      "xi_std": 7.307924583542854e-06,
+      "xi_rel_std": 0.0010690449676496975,
+      "xi_eps": 0.006887471329503735,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 20000000.0,
+      "refresh_rate_hz": 2441.40625
+    },
+    {
+      "refresh_period": 500,
+      "n_frames": 200000,
+      "n_samples_per_codebook": 500,
+      "recovery_fraction": {
+        "equal": 1.0,
+        "weak": 0.875
+      },
+      "n_found": {
+        "equal": 16,
+        "weak": 14
+      },
+      "err_operator_norm": 281.70187801463135,
+      "lambda_top": 1244.8056569202295,
+      "attack_blocked": false,
+      "xi_mean": 0.0068359375,
+      "xi_std": 8.17050807162183e-06,
+      "xi_rel_std": 0.0011952286093343935,
+      "xi_eps": 0.00689357075438293,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 16000000.0,
+      "refresh_rate_hz": 1953.125
+    },
+    {
+      "refresh_period": 700,
+      "n_frames": 142857,
+      "n_samples_per_codebook": 700,
+      "recovery_fraction": {
+        "equal": 1.0,
+        "weak": 0.875
+      },
+      "n_found": {
+        "equal": 16,
+        "weak": 14
+      },
+      "err_operator_norm": 224.40086066638563,
+      "lambda_top": 1199.3674742337587,
+      "attack_blocked": false,
+      "xi_mean": 0.0068359375,
+      "xi_std": 9.667480357776216e-06,
+      "xi_rel_std": 0.0014142142694804065,
+      "xi_eps": 0.006904164380257788,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 11428571.42857143,
+      "refresh_rate_hz": 1395.0892857142858
+    },
+    {
+      "refresh_period": 1000,
+      "n_frames": 100000,
+      "n_samples_per_codebook": 1000,
+      "recovery_fraction": {
+        "equal": 1.0,
+        "weak": 0.875
+      },
+      "n_found": {
+        "equal": 16,
+        "weak": 14
+      },
+      "err_operator_norm": 190.0216496904889,
+      "lambda_top": 1191.1578642065544,
+      "attack_blocked": false,
+      "xi_mean": 0.0068359375,
+      "xi_std": 1.1554843326366437e-05,
+      "xi_rel_std": 0.0016903085094570332,
+      "xi_eps": 0.00691753581874364,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 8000000.0,
+      "refresh_rate_hz": 976.5625
+    },
+    {
+      "refresh_period": 3000,
+      "n_frames": 33333,
+      "n_samples_per_codebook": 3000,
+      "recovery_fraction": {
+        "equal": 1.0,
+        "weak": 0.875
+      },
+      "n_found": {
+        "equal": 16,
+        "weak": 14
+      },
+      "err_operator_norm": 101.74182252948246,
+      "lambda_top": 1133.1200803731942,
+      "attack_blocked": false,
+      "xi_mean": 0.0068359375,
+      "xi_std": 2.0013675783393928e-05,
+      "xi_rel_std": 0.002927714857456483,
+      "xi_eps": 0.006977671822380878,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 2666666.6666666665,
+      "refresh_rate_hz": 325.5208333333333
+    },
+    {
+      "refresh_period": 10000,
+      "n_frames": 10000,
+      "n_samples_per_codebook": 10000,
+      "recovery_fraction": {
+        "equal": 1.0,
+        "weak": 0.875
+      },
+      "n_found": {
+        "equal": 16,
+        "weak": 14
+      },
+      "err_operator_norm": 43.07094174690779,
+      "lambda_top": 1128.1883792281992,
+      "attack_blocked": false,
+      "xi_mean": 0.0068359375,
+      "xi_std": 3.6539622917714274e-05,
+      "xi_rel_std": 0.005345224838248488,
+      "xi_eps": 0.007096140123879068,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 800000.0,
+      "refresh_rate_hz": 97.65625
+    },
+    {
+      "refresh_period": 100000,
+      "n_frames": 1000,
+      "n_samples_per_codebook": 100000,
+      "recovery_fraction": {
+        "equal": 1.0,
+        "weak": 1.0
+      },
+      "n_found": {
+        "equal": 16,
+        "weak": 16
+      },
+      "err_operator_norm": 15.382269363720553,
+      "lambda_top": 1133.8660221482476,
+      "attack_blocked": false,
+      "xi_mean": 0.0068359375,
+      "xi_std": 0.00011554843326366438,
+      "xi_rel_std": 0.016903085094570332,
+      "xi_eps": 0.007680595383582099,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 80000.0,
+      "refresh_rate_hz": 9.765625
+    },
+    {
+      "refresh_period": 100000000,
+      "n_frames": 1,
+      "n_samples_per_codebook": 100000,
+      "recovery_fraction": {
+        "equal": 1.0,
+        "weak": 1.0
+      },
+      "n_found": {
+        "equal": 16,
+        "weak": 16
+      },
+      "err_operator_norm": 15.382269363720553,
+      "lambda_top": 1133.8660221482476,
+      "attack_blocked": false,
+      "xi_mean": 0.0068359375,
+      "xi_std": 0.003653962291771427,
+      "xi_rel_std": 0.5345224838248488,
+      "xi_eps": 0.06917819898117773,
+      "prf_bits_per_refresh": 8192.0,
+      "prf_throughput_bit_per_s": 80.0,
+      "refresh_rate_hz": 0.009765625
+    }
+  ],
+  "t_blocked_max": 400,
+  "t_unblocked_min": 500,
+  "safe_point": {
+    "refresh_period": 400,
+    "n_frames": 250000,
+    "n_samples_per_codebook": 400,
+    "recovery_fraction": {
+      "equal": 0.5,
+      "weak": 0.5
+    },
+    "n_found": {
+      "equal": 8,
+      "weak": 8
+    },
+    "err_operator_norm": 263.7749056368748,
+    "lambda_top": 1297.3565816635269,
+    "attack_blocked": true,
+    "xi_mean": 0.0068359375,
+    "xi_std": 7.307924583542854e-06,
+    "xi_rel_std": 0.0010690449676496975,
+    "xi_eps": 0.006887471329503735,
+    "prf_bits_per_refresh": 8192.0,
+    "prf_throughput_bit_per_s": 20000000.0,
+    "refresh_rate_hz": 2441.40625
+  },
+  "frozen_baseline": {
+    "refresh_period": 100000000,
+    "n_frames": 1,
+    "n_samples_per_codebook": 100000,
+    "recovery_fraction": {
+      "equal": 1.0,
+      "weak": 1.0
+    },
+    "n_found": {
+      "equal": 16,
+      "weak": 16
+    },
+    "err_operator_norm": 15.382269363720553,
+    "lambda_top": 1133.8660221482476,
+    "attack_blocked": false,
+    "xi_mean": 0.0068359375,
+    "xi_std": 0.003653962291771427,
+    "xi_rel_std": 0.5345224838248488,
+    "xi_eps": 0.06917819898117773,
+    "prf_bits_per_refresh": 8192.0,
+    "prf_throughput_bit_per_s": 80.0,
+    "refresh_rate_hz": 0.009765625
+  },
+  "n_theory_bound": 67480.35152078237,
+  "note": "'blocked' refers to the second-moment attack only; no cryptographic conclusion follows"
+}

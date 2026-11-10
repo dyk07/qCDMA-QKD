@@ -35,6 +35,7 @@
 113 Mbit
 128 bit
 142 kbit
+15.30 bit
 1530.3 bit
 19.5 bit
 190 kbit
@@ -44,6 +45,7 @@
 207.7 bit
 207.726 bit
 21 km
+216.1 bit
 221 kbit
 233.5 km
 25 Gchip/s

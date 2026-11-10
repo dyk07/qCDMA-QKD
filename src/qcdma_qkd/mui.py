@@ -542,3 +542,112 @@ def xi_vs_block_length_note() -> str:
         "Relative std = sqrt(2 * sum kappa^2) / sum kappa = sqrt(2/K) for K "
         "equal interferers (53% at K=7)."
     )
+
+
+# --------------------------------------------------------------------------- #
+# Frame-level refresh: the security / MUI-stability / PRF-cost trade-off
+# --------------------------------------------------------------------------- #
+def xi_frame_refresh(kappa: np.ndarray, L: int, n_frames: int,
+                     n_symbols_per_frame: int = 100,
+                     n_codes: int | None = None,
+                     n_draws: int = 200_000, seed: int = 0) -> dict:
+    r"""Block-averaged MUI when the codebook is re-drawn every frame.
+
+    Why this exists
+    ---------------
+    :func:`xi_block_std` says the block-averaged excess noise has relative
+    std ``sqrt(2/K)`` (53% at ``K = 7``) and that this does **not** shrink with
+    the number of symbols -- because the codes are frozen for the whole block,
+    so every symbol sees the same ``rho_jm``.  That is a *deliberate trade*: it
+    is the price paid for the code being usable at all (Bob must repeat it to
+    despread).
+
+    But the same freezing is what makes the code recoverable from second
+    moments (:func:`qcdma_qkd.attack.observation_covariance`).  Refreshing the
+    codebook every ``n_symbols_per_frame`` symbols destroys that: no single
+    ``Sigma`` accumulates more than one frame of samples.  The question this
+    function answers is the *cost* on the MUI side.
+
+    Model
+    -----
+    Each frame draws an independent codebook, so the per-frame cross-correlation
+    squares are independent draws.  The block average of ``N`` symbols spanning
+    ``F`` frames is
+
+    .. math::
+
+        \xi_{\text{block}}
+        =\frac1{L}\sum_j\kappa_j\Big(\frac1F\sum_{f=1}^{F}z_{j,f}^2\Big)
+        =\frac1L\sum_j\frac{\kappa_j}{F}\sum_{f=1}^{F}z_{j,f}^2 ,
+
+    i.e. a weighted sum of ``chi^2_F / F`` variables instead of ``chi^2_1``.
+    Hence
+
+    .. math::
+
+        \mathbb{E}[\xi_{\text{block}}]=\frac1L\sum_j\kappa_j
+        \quad\text{(unchanged)},\qquad
+        \operatorname{Var}=\frac{2}{L^2F}\sum_j\kappa_j^2
+        \quad\text{(shrinks as }1/F\text{)}.
+
+    So refreshing **does not change the mean MUI** (a fresh code is just as
+    correlated as an old one on average) but it **cuts the fluctuation**, which
+    is what ``eps_MUI`` has to be provisioned against.
+
+    Parameters
+    ----------
+    n_frames : int
+        Number of independent codebooks spanned by the block.  ``n_frames = 1``
+        is the frozen-code baseline used everywhere else in the project.
+    n_symbols_per_frame : int
+        Symbols between refreshes.  Used only to report the PRF refresh rate.
+    n_codes : int, optional
+        How many codes the codebook holds, i.e. ``M`` = victim + interferers.
+        Defaults to ``kappa.size + 1``, since ``kappa`` normally holds only the
+        interferers.  Pass it explicitly when ``kappa`` already includes the
+        victim (then ``n_codes = kappa.size``), otherwise the reported PRF cost
+        is one code short.
+
+    Returns
+    -------
+    dict
+        ``xi_mean``, ``xi_std``, ``xi_rel_std``, ``xi_eps`` (the ``eps=1e-12``
+        upper quantile), ``refresh_period`` (symbols between refreshes, low
+        =. good for security), ``refresh_rate_hz`` (PRF refreshes per second)
+        and ``prf_throughput_bits_per_s`` (``M * L / 8`` bytes per refresh).
+    """
+    kappa = np.atleast_1d(np.asarray(kappa, dtype=float))
+    F = max(int(n_frames), 1)
+    M = int(n_codes) if n_codes is not None else int(kappa.size) + 1
+    if kappa.size == 0:
+        return dict(xi_mean=0.0, xi_std=0.0, xi_rel_std=0.0, xi_eps=0.0,
+                    refresh_period=int(n_symbols_per_frame),
+                    refresh_rate_hz=0.0, prf_throughput_bits_per_s=0.0,
+                    n_frames=F, n_symbols_per_frame=int(n_symbols_per_frame),
+                    n_codes=M)
+
+    mean = float(np.sum(kappa) / L)
+    var = float(2.0 * np.sum(kappa ** 2) / (L ** 2 * F))
+
+    if np.allclose(kappa, kappa[:1]):
+        # equal powers: chi^2 in (F*K) degrees of freedom
+        dof = F * int(kappa.size)
+        xi_eps = float(kappa[0] * float(stats.chi2.ppf(1.0 - 1e-12, dof))
+                       / (L * F))
+    else:
+        # unequal powers: Gamma moment match on the per-frame chi^2 sum
+        a = mean ** 2 / var
+        scale = var / mean
+        xi_eps = float(stats.gamma.ppf(1.0 - 1e-12, a=a, scale=scale))
+
+    return dict(xi_mean=mean, xi_std=float(np.sqrt(var)),
+                xi_rel_std=float(np.sqrt(var) / mean) if mean > 0 else 0.0,
+                xi_eps=xi_eps,
+                refresh_period=int(n_symbols_per_frame),
+                refresh_rate_hz=0.0 if n_symbols_per_frame <= 0 else
+                1.0 / float(n_symbols_per_frame),
+                prf_throughput_bits_per_s=float(M * L * 8)
+                / float(max(n_symbols_per_frame, 1)),
+                n_frames=F, n_symbols_per_frame=int(n_symbols_per_frame),
+                n_codes=M)
+

@@ -1,0 +1,9 @@
+T=  100  equal: rec_max=0.000 found=0 err=684.1 | weak: rec_max=0.000 found=0 err=618.1
+T=  150  equal: rec_max=0.000 found=0 err=469.3 | weak: rec_max=0.000 found=0 err=474.4
+T=  200  equal: rec_max=0.000 found=0 err=370.7 | weak: rec_max=0.000 found=0 err=370.8
+T=  300  equal: rec_max=0.000 found=0 err=284.8 | weak: rec_max=0.000 found=0 err=251.9
+T=  400  equal: rec_max=0.500 found=8 err=211.1 | weak: rec_max=0.500 found=8 err=202.8
+T=  500  equal: rec_max=1.000 found=16 err=229.1 | weak: rec_max=0.875 found=14 err=227.8
+T=  600  equal: rec_max=1.000 found=16 err=212.9 | weak: rec_max=0.875 found=14 err=216.2
+T=  800  equal: rec_max=1.000 found=16 err=221.6 | weak: rec_max=0.875 found=14 err=221.8
+T= 1000  equal: rec_max=1.000 found=16 err=165.8 | weak: rec_max=0.875 found=14 err=167.2

@@ -283,6 +283,437 @@ def blind_estimation_table(observation_snrs: np.ndarray, seed_bits: int, L: int,
 
 
 # --------------------------------------------------------------------------- #
+# B'. What Eve can actually learn: the observation law depends on the codebook
+#     only through its Gram matrix -- which splits the problem into TWO regimes
+# --------------------------------------------------------------------------- #
+def observation_covariance(kappa: np.ndarray, L: int, symbol_var: float = 1.0,
+                           noise_var: float = 1.0) -> dict:
+    r"""Spectrum of the per-symbol observation covariance: the *only* channel.
+
+    Setup.  With unnormalised ``+-1`` codes (``<c_j,c_j> = L``) and i.i.d.
+    Gaussian symbols ``a_j(t) ~ N(0, symbol_var)``, the received vector is
+
+    .. math::
+
+        y_t = \sum_j \sqrt{\kappa_j}\, a_j(t)\, c_j + n_t,
+        \qquad n_t \sim N(0, \text{noise\_var}\,I_L).
+
+    Because this is a *linear* combination of independent Gaussians,
+    ``y_t | C ~ N(0, Sigma)`` **exactly**, with
+
+    .. math::
+
+        \Sigma = \text{symbol\_var}\,\sum_j \kappa_j c_j c_j^\top
+                 + \text{noise\_var}\,I_L .
+
+    Consequences (this is the structural result that replaces the per-chip model)
+    ---------------------------------------------------------------------------
+    1. The observation law is fully determined by ``Sigma``.  In particular it
+       does **not** depend on the *signs* of the interferers' symbols.  So the
+       premise of the matched-filter model -- that Eve must resolve the other
+       users' symbols in order to attack the code -- is not the premise of the
+       *optimal* attack.  Eve can work from second moments alone.
+    2. ``(y_1..y_n)`` therefore has ``S_hat = (1/n) sum_t y_t y_t^T`` as a
+       **sufficient statistic**, and the codebook enters only through it.
+    3. With normalised-ish codes (``<c_j,c_j> = L``, ``<c_i,c_j> ~ 0``) the
+       spectrum is::
+
+           noise_var + symbol_var * L * kappa_j   (once per user j)
+           noise_var                              (multiplicity L - M)
+
+       so ``Sigma`` reveals the **subspace** ``S = span{c_j}`` and the *powers*
+       ``kappa_j``, but **not** which code belongs to which user, and not the
+       sign of any code.  With equal ``kappa_j`` even the individual
+       ``kappa_j`` are hidden, leaving only the subspace.
+
+    The returned ``snr_eff`` is the relative spectral separation that governs
+    how many samples subspace identification needs.  It uses the **smallest**
+    ``kappa_j`` (the hardest code to separate out) over the **largest**
+    eigenvalue -- the conservative pairing.
+
+    Parameters
+    ----------
+    kappa : array
+        Relative user powers, **including the victim**, i.e. all ``M`` users.
+    """
+    kappa = np.atleast_1d(np.asarray(kappa, dtype=float))
+    kappa = kappa[kappa >= 0]
+    if float(noise_var) <= 0:
+        raise ValueError("noise_var must be positive")
+    shifts = float(symbol_var) * float(L) * kappa          # per-user eigenvalue shift
+    lam_gap = float(np.min(shifts)) if shifts.size else 0.0
+    lam_noise = float(noise_var)
+    lam_max = lam_noise + (float(np.max(shifts)) if shifts.size else 0.0)
+    return dict(lambda_signal=lam_gap, lambda_noise=lam_noise,
+                lambda_max=lam_max,
+                shifts=shifts,
+                snr_eff=lam_gap / lam_max if lam_max > 0 else 0.0,
+                n_users=int(kappa.size),
+                degenerate_signal=bool(np.allclose(kappa, kappa[:1])
+                                       if kappa.size else True))
+
+
+def subspace_identification_samples(L: int, kappa: np.ndarray,
+                                   symbol_var: float = 1.0,
+                                   noise_var: float = 1.0,
+                                   eps: float = 1e-12,
+                                   constant: float = 64.0) -> float:
+    r"""Samples Eve needs to identify the code **subspace** (rigorous, via
+    covariance concentration).
+
+    ``S_hat`` concentrates around ``Sigma`` in operator norm.  For Gaussian
+    observations the standard bound (Vershynin, *High-Dimensional Probability*,
+    Thm. 4.6.1 / 9.2.4) gives, with probability at least ``1 - eps``,
+
+    .. math::
+
+        \|\hat S - \Sigma\|_2 \;\le\; c\,\|\Sigma\|_2
+        \sqrt{\frac{L + \log(2/\epsilon)}{n}} .
+
+    To resolve the code subspace we need this error below half the spectral gap
+    ``lambda_signal``, i.e. ``2c * ||Sigma||_2 * sqrt(...) <= lambda_signal``.
+    With ``||Sigma||_2 = lambda_max`` and ``snr_eff = lambda_signal/lambda_max``:
+
+    .. math::
+
+        n \;\ge\; \frac{4 c^2 (L + \log(2/\epsilon))}{\text{snr\_eff}^2} .
+
+    The default ``constant = 64 = 4c^2`` corresponds to ``c = 4``, a standard
+    non-optimised constant.  **The scaling is the point, not the constant**:
+    ``n`` is linear in ``L`` and grows only as ``snr_eff^{-2}``.  Measured
+    (``experiments/e11_covariance_attack.py``), ``n`` in the low ``10^4`` already
+    suffices for ``L = 1024``, ``M = 8`` at equal powers -- far below this
+    conservative bound, so treat the formula as a *sufficient* condition and
+    :func:`code_recovery_from_covariance` as the operative measurement.
+    """
+    spec = observation_covariance(kappa, L, symbol_var, noise_var)
+    if spec["snr_eff"] <= 0:
+        return float("inf")
+    return float(constant * (float(L) + math.log(2.0 / float(eps)))
+                 / spec["snr_eff"] ** 2)
+
+
+def chip_identification_samples(L: int, per_chip_snr: float,
+                                target_p_chip: float = 0.99) -> float:
+    """Samples the **matched-filter** attack needs to reach ``target_p_chip``.
+
+    This is the inverse of :func:`chip_success_probability`::
+
+        p_chip = Phi(sqrt(per_chip_snr * n / L))
+        =>  n = Phi^{-1}(target)^2 * L / per_chip_snr
+
+    ``per_chip_snr`` is the SNR of one chip in one symbol (i.e. the
+    ``observation_snr`` argument of :func:`chip_success_probability`).
+    """
+    from scipy import stats
+    if per_chip_snr <= 0:
+        return float("inf")
+    z = float(stats.norm.isf(1.0 - float(target_p_chip)))
+    return float(z ** 2 * float(L) / float(per_chip_snr))
+
+
+def blind_attack_envelope(L: int, kappa: np.ndarray, per_chip_snr: float,
+                          symbol_var: float = 1.0, noise_var: float = 1.0,
+                          eps: float = 1e-12,
+                          target_p_chip: float = 0.99) -> dict:
+    r"""Both blind attacks side by side, and the **envelope** (the cheaper one).
+
+    The project's security accounting used only the matched filter, whose cost
+    is ``~ z^2 L / snr_chip``.  The subspace attack costs
+    ``~ 4c^2 (L + log(2/eps)) / snr_eff^2``.
+
+    What the numbers actually say (``experiments/e11_covariance_attack.py``)
+    -----------------------------------------------------------------------
+    If ``per_chip_snr`` is tied to the same physical power as ``snr_eff`` (as it
+    is in E11), then ``snr_eff ~ kappa L /(1 + kappa L)`` and the **matched
+    filter is cheaper in sample count at essentially every power**; the subspace
+    cost grows as ``snr_eff^{-2}`` against the filter's ``snr_chip^{-1}``.  So
+    "the subspace attack is the cheaper attack" is **not** the claim this
+    function supports, and the envelope usually returns the chip cost.
+
+    Why the subspace attack is nevertheless the relevant threat
+    ----------------------------------------------------------
+    Cost is not the whole story; **premise** is.  The matched filter presumes
+    Eve can resolve the *other users' symbols* well enough to form per-chip
+    decisions on the target code.  But the observation law is
+
+        y_t | C ~ N(0, Sigma),
+
+    which is blind to those symbol signs (see
+    :func:`observation_covariance`).  So the per-chip model answers a question
+    Eve never has to ask, and it returns ``p_chip -> 1/2`` ("no leakage") in
+    exactly the weak-signal regime where a second-moment attack still works:
+    :func:`code_recovery_from_covariance` recovers every code at ``n = 10^4``
+    symbols even for a 0.01-power interferer.  The envelope is reported for
+    completeness, not as the ground for the security conclusion.
+
+    See ``docs/08_open_problems.md`` §1.1 and ``docs/09_model_vs_bound.md`` §5.
+    """
+    spec = observation_covariance(kappa, L, symbol_var, noise_var)
+    n_chip = chip_identification_samples(L, per_chip_snr, target_p_chip)
+    n_sub = subspace_identification_samples(L, kappa, symbol_var, noise_var, eps)
+    n_env = min(n_chip, n_sub)
+    return dict(n_chip=n_chip, n_subspace=n_sub, n_samples=n_env,
+                chip_is_cheaper=bool(n_chip <= n_sub),
+                ratio_subspace_over_chip=(n_sub / n_chip
+                                          if n_chip > 0 and np.isfinite(n_chip)
+                                          else np.nan),
+                snr_eff=spec["snr_eff"], lambda_signal=spec["lambda_signal"],
+                lambda_noise=spec["lambda_noise"])
+
+
+def code_ambiguity_bits(n_users: int, equal_powers: bool = False) -> float:
+    r"""Bits of the codebook that a **perfect** covariance leaves ambiguous.
+
+    This is NOT the amount of work the attack needs -- see
+    :func:`blind_attack_envelope` for the sample cost.  It is the residual
+    ambiguity *after* the subspace is known, and it is what
+    :func:`count_pm1_vectors_in_span` measures.
+
+    The exact covariance pins down ``range(Sigma) = span{c_j}`` exactly (the
+    noise only shifts the spectrum).  What is left is: how many ``+-1`` vectors
+    lie in that subspace, and can Eve tell which is which?
+
+    * A random rank-``M`` subspace spanned by ``+-1`` vectors contains **exactly
+      the ``2M`` vectors** ``{+-c_1, ..., +-c_M}`` with high probability (the
+      odd extra vector appears occasionally at small ``L``; the tests at
+      ``L in {16, 18}`` show counts of ``2M`` and rarely ``2M + 2``).  So the
+      ``+-1`` prior **completely breaks** the continuous ambiguity that would
+      otherwise make blind separation impossible.
+    * A global sign per code is irrelevant for despreading (``<+-c_0, y>`` gives
+      the same symbol up to sign).
+    * If the ``kappa_j`` are **distinct**, the eigenvectors of ``Sigma`` order
+      the codes by power, so the ordering is known: ambiguity ``0`` bits.
+    * If the ``kappa_j`` are **equal**, the non-noise eigenvalues are equal and
+      only the *set* of codes is known, not which user owns which: ambiguity
+      ``log2(M!)`` ("labelling").  That is 15.3 bit for ``M = 8``.
+    """
+    M = max(int(n_users), 1)
+    if not equal_powers:
+        return 0.0
+    return float(math.lgamma(M + 1) / math.log(2.0))
+
+
+def count_pm1_vectors_in_span(codebook: np.ndarray) -> int:
+    r"""Number of ``+-1`` vectors lying in ``span(codebook)`` (brute force).
+
+    Only usable for small ``L`` (``2^L`` enumeration).  This is the measurement
+    behind :func:`code_ambiguity_bits`: for a random ``M``-dimensional subspace
+    spanned by ``+-1`` codes the count is ``2M`` (each code up to sign), so
+    knowing the subspace hands Eve the codes outright once she enumerates the
+    ``+-1`` lattice points inside it.
+    """
+    C = np.atleast_2d(np.asarray(codebook, dtype=float))
+    L = C.shape[1]
+    if L > 20:
+        raise ValueError("brute force is only sensible for L <= 20")
+    Q, _ = np.linalg.qr(C.T)
+    Q = Q[:, :C.shape[0]]
+    count = 0
+    for mask in range(2 ** L):
+        v = np.array([1.0 if (mask >> i) & 1 else -1.0 for i in range(L)])
+        if np.allclose(Q @ (Q.T @ v), v, atol=1e-9):
+            count += 1
+    return count
+
+
+def recover_codes_from_subspace(subspace_basis: np.ndarray,
+                                iters: int = 2000, restarts: int = 200,
+                                tol: float = 0.05, seed: int = 1) -> dict:
+    r"""Alternating projections: find the ``+-1`` vectors inside a subspace.
+
+    Given an orthonormal basis ``Q`` (``L x M``) of ``span{c_j}``, find
+    ``x in {+-1}^L`` with ``Q Q^T x = x`` by the iteration
+    ``x <- sign(Q Q^T x)`` from random starts.
+
+    This is the step that converts "Eve knows the code subspace" into "Eve knows
+    the codes".  Without the ``+-1`` prior the subspace would be useless -- any
+    orthogonal rotation of the codes spans the same space and gives statistically
+    identical Gaussian observations (the classical ICA unidentifiability).  The
+    ``+-1`` constraint is discrete and is *not* preserved by rotations, which is
+    exactly why the prior is decisive.
+
+    Acceptance.  At finite ``n`` the true codes are **not** exactly in the
+    estimated subspace, so an absolute residual test is wrong (it would reject
+    every candidate).  A candidate is accepted when (i) the sign iteration
+    reaches a **fixed point** and (ii) its per-chip projection RMS
+    ``||QQ^T x - x||_2 / sqrt(L)`` is at most ``tol``.  ``tol`` is therefore in
+    units of one code chip (``|c_ij| = 1``), not an absolute distance.
+    ``exact=True`` in the result means the residual was at float noise level.
+
+    Returns
+    -------
+    dict
+        ``vectors``  ``(k, L)`` distinct ``+-1`` vectors found (typically
+        ``2M``: each code up to a global sign, which is irrelevant for
+        despreading).
+        ``projection_rms``  per-vector RMS residual (same order as ``vectors``).
+        ``exact``  whether every accepted vector lies in the subspace to float
+        precision.
+        ``n_restarts``  number of random starts used.
+    """
+    Q = np.atleast_2d(np.asarray(subspace_basis, dtype=float))
+    L = Q.shape[0]
+    rng = np.random.default_rng(seed)
+    found: dict[tuple, np.ndarray] = {}
+    rms: dict[tuple, float] = {}
+    for _ in range(int(restarts)):
+        x = rng.choice([-1.0, 1.0], size=L)
+        converged = False
+        # Cycle detection.  The sign iteration is `x <- sign(QQ^T x)`; when the
+        # subspace contains no `+-1` vector -- the common case *during a failed
+        # attack* -- it settles into a short limit cycle, typically of length 2.
+        # Without a guard it would burn the whole `iters` budget.
+        #
+        # Implementation note: we keep the last few states as plain arrays and
+        # compare with `np.array_equal` (a C loop).  An earlier version kept a
+        # Python `set` of 1024-element tuples, which hashed ~1 KB per iteration
+        # and dominated the runtime of every failed attack.
+        history: list[np.ndarray] = []
+        max_cycle = 4
+        for _ in range(int(iters)):
+            xn = np.sign(Q @ (Q.T @ x))
+            xn[xn == 0] = 1.0                      # resolve exact-zero ties
+            if np.array_equal(xn, x):
+                converged = True
+                break
+            if any(np.array_equal(xn, h) for h in history):
+                break                              # limit cycle, give up
+            history.append(xn)
+            if len(history) > max_cycle:
+                del history[0]
+            x = xn
+        if not converged:
+            continue
+        r = float(np.linalg.norm(Q @ (Q.T @ x) - x) / math.sqrt(L))
+        if r <= tol:
+            key = tuple(x.astype(np.int8))
+            found[key] = x
+            rms[key] = r
+    keys = list(found)
+    return dict(vectors=(np.array([found[k] for k in keys]) if keys
+                         else np.zeros((0, L))),
+                projection_rms=np.array([rms[k] for k in keys]),
+                exact=bool(all(rms[k] <= 1e-9 for k in keys)),
+                n_restarts=int(restarts))
+
+
+def coded_covariance(codebook: np.ndarray, kappa: np.ndarray,
+                     symbol_var: float = 1.0, noise_var: float = 1.0) -> np.ndarray:
+    r"""The exact ``Sigma`` of :func:`observation_covariance`, as a matrix.
+
+    ``Sigma = symbol_var * sum_j kappa_j c_j c_j^T + noise_var * I``.
+    Kept separate so tests can compare the eigen-spectrum against the closed
+    form returned by :func:`observation_covariance`.
+    """
+    C = np.atleast_2d(np.asarray(codebook, dtype=float))
+    kap = np.atleast_1d(np.asarray(kappa, dtype=float))
+    if kap.size != C.shape[0]:
+        raise ValueError("kappa must have one entry per codebook row")
+    L = C.shape[1]
+    return float(symbol_var) * ((C.T * kap) @ C) + float(noise_var) * np.eye(L)
+
+
+def code_recovery_from_covariance(codebook: np.ndarray, kappa: np.ndarray,
+                                  n_samples: int, symbol_var: float = 1.0,
+                                  noise_var: float = 1.0, chunk: int = 25000,
+                                  restarts: int = 200, iters: int = 2000,
+                                  tol: float = 0.05, seed: int = 1) -> dict:
+    r"""Simulate the **subspace attack** end to end, and measure what Eve recovers.
+
+    This is the measurement that turns the covariance channel from a *model* into
+    an observed fact.  Steps:
+
+    1. Sample ``n_samples`` observations ``y_t = A z_t`` in chunks, where
+       ``A A^T = Sigma`` (Cholesky).  Chunking is essential: materialising
+       ``(n_samples, L)`` at ``n = 10^8`` would need ~763 GiB.
+    2. ``S_hat = (1/n) sum_t y_t y_t^T`` (accumulated, never stored).
+    3. Take the top-``M`` eigenvectors as the estimated code subspace ``Q``.
+    4. Enumerate ``+-1`` vectors in ``Q`` via
+       :func:`recover_codes_from_subspace`.
+    5. Score each true code by its best ``|cos|`` against the found vectors.
+       A code counts as recovered when that best correlation is ``>= 0.9``;
+       around 1/``sqrt(L)`` (~0.03 here) means not recovered.
+
+    Crucially step 3 alone recovers **nothing** (the eigenvectors are arbitrary
+    orthonormal mixtures of the codes); the recovery comes from the discrete
+    ``+-1`` prior in step 4.  Both numbers are returned so the distinction is
+    visible.
+
+    Parameters
+    ----------
+    codebook : array ``(M, L)``
+        The true ``+-1`` codes.  In the protocol these are PRF outputs; the
+        attack assumes only that Eve knows ``+-1``, not their values.
+    kappa : array ``(M,)``
+        Received powers, victim included.
+
+    Returns
+    -------
+    dict
+        ``recovery_fraction``  fraction of codes recovered (``>= 0.9`` corr).
+        ``per_code_best_corr``  best ``|cos|`` per true code.
+        ``n_found``  number of distinct ``+-1`` vectors found in the subspace.
+        ``err_operator_norm``  ``||S_hat - Sigma||_2`` (concentration check).
+        ``eigvec_best_corr_worst/mean``  what the *eigenvectors alone* achieve.
+        ``n_samples``, ``snr_eff``, ``n_theory``  the cost accounting.
+    """
+    C = np.atleast_2d(np.asarray(codebook, dtype=float))
+    kap = np.atleast_1d(np.asarray(kappa, dtype=float))
+    M, L = C.shape
+    n = int(n_samples)
+    if n <= 0:
+        raise ValueError("n_samples must be positive")
+
+    Sigma = coded_covariance(C, kap, symbol_var, noise_var)
+    A = np.linalg.cholesky(Sigma)
+    rng = np.random.default_rng(seed)
+
+    gram = np.zeros((L, L))
+    done = 0
+    while done < n:
+        m = min(int(chunk), n - done)
+        Z = rng.standard_normal((m, L))
+        gram += Z.T @ Z
+        done += m
+    S = A @ (gram / n) @ A.T
+
+    lam, U = np.linalg.eigh(S)
+    Q = U[:, -M:]
+
+    Cn = C / np.linalg.norm(C, axis=1, keepdims=True)
+    Qn = Q / np.linalg.norm(Q, axis=0, keepdims=True)
+    eigcorr = np.abs(Qn.T @ Cn.T).max(axis=0)
+
+    rec = recover_codes_from_subspace(Q, iters=iters, restarts=restarts,
+                                      tol=tol, seed=seed)
+    found = rec["vectors"]
+    if found.size:
+        Fn = found / np.linalg.norm(found, axis=1, keepdims=True)
+        best = np.abs(Fn @ Cn.T).max(axis=0)
+    else:
+        best = np.zeros(M)
+
+    spec = observation_covariance(kap, L, symbol_var, noise_var)
+    return dict(
+        n_samples=n,
+        recovery_fraction=float(np.mean(best >= 0.9)),
+        per_code_best_corr=[float(x) for x in best],
+        n_found=int(found.shape[0]),
+        n_exact=int(sum(1 for r in rec["projection_rms"] if r <= 1e-9)),
+        worst_projection_rms=(float(rec["projection_rms"].max())
+                              if rec["projection_rms"].size else None),
+        err_operator_norm=float(np.linalg.norm(S - Sigma, 2)),
+        lambda_top=float(lam[-1]),
+        lambda_noise_top=float(lam[L - M - 1]) if L - M - 1 >= 0 else 0.0,
+        eigvec_best_corr_worst=float(eigcorr.min()),
+        eigvec_best_corr_mean=float(eigcorr.mean()),
+        snr_eff=spec["snr_eff"],
+        n_theory=subspace_identification_samples(L, kap, symbol_var, noise_var),
+    )
+
+
+# --------------------------------------------------------------------------- #
 # C. Cross-round leakage and the refresh constraint
 # --------------------------------------------------------------------------- #
 def refresh_security_constraint(seed_bits: int, L: int,
