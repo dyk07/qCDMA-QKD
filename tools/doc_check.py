@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import collections
 import json
+import math
 import re
 import sys
 from dataclasses import dataclass, field
@@ -222,6 +223,130 @@ def build_claims() -> list[Claim]:
               files=("00_summary.md",),
               alternatives=("1.39e-4", "1.392e-4"),
               note="uses the finite-size K_n, hence larger than the old value"),
+
+        # ---- auth share: the numbers quoted against the "10%" convention -- #
+        # The trap this block exists to prevent: ``a/K`` was published as 1.98%
+        # (OTP) and 4.8e-5 (AXU), both computed against the *asymptotic*
+        # K_n = 4.31 Mbit while the loop had already moved to the finite-size
+        # 3.33 Mbit.  The percentages were internally consistent and the tests
+        # were green -- the basis was simply wrong.  Each claim below therefore
+        # pins the *finite-size* rendering, and the asymptotic value is only
+        # allowed as an explicitly-labelled reference column.
+        Claim("auth share a/K, AXU, finite-size",
+              anchor="$a_n/K_n$（AXU，默认）",
+              value=lambda: e0()["auth_bits_per_round"] / e0()["key_bits_per_round"],
+              form=lambda v: tex(v, 4),
+              files=("10_parameters.md",),
+              alternatives=("6.235\\times10^{-5}",),
+              note="207.7 bit over the finite-size K_n; independent of the "
+                   "fragmentation B"),
+        Claim("auth share a/K, OTP, finite-size",
+              anchor="OTP（最坏情形） | 667",
+              value=lambda: (e0()["auth_messages_per_round"] * 128.0)
+                            / e0()["key_bits_per_round"],
+              form=lambda v: tex(v, 3),
+              files=("10_parameters.md",),
+              alternatives=("2.56\\times10^{-2}",),
+              note="OTP = one 128-bit key per message; the '10%' figure people "
+                   "remember"),
+        Claim("auth share a/K, AXU, asymptotic reference",
+              anchor="| $\\epsilon$-AXU（默认） | 207.7 bit |",
+              value=lambda: e0()["auth_bits_per_round"]
+                            / e0()["key_bits_per_round_asym"],
+              form=lambda v: tex(v, 4),
+              files=("00_summary.md",),
+              alternatives=("4.817\\times10^{-5}",),
+              note="reference only -- the loop does NOT use this denominator; "
+                   "anchored on the AXU row because the table has two claims"),
+        Claim("auth share a/K, OTP, asymptotic reference",
+              anchor="| OTP（最坏情形）",
+              value=lambda: (e0()["auth_messages_per_round"] * 128.0)
+                            / e0()["key_bits_per_round_asym"],
+              form=lambda v: f"{v * 100:.3g}%",
+              files=("00_summary.md",),
+              alternatives=("1.98%",),
+              note="the historical figure; only correct against K_n_asym"),
+        Claim("fragmentation B for a/K = 10% (OTP, finite-size)",
+              anchor="262 kbit",
+              value=lambda: 262144.0,
+              form=lambda v: f"{v:,.0f}",
+              files=("06_key_budget.md",),
+              alternatives=("2.6\\times10^5", "262"),
+              note="halving B twice from 2^20 gets within 2% of 10%"),
+        Claim("tag length for a/K = 10% (OTP, finite-size)",
+              anchor="标签放大到",
+              value=lambda: 506.0,
+              form=lambda v: f"{v:.0f}",
+              files=("06_key_budget.md",),
+              note="t = 0.1*K_n/(transcript per symbol / B)"),
+
+        # ---- the appendix parameter table -------------------------------- #
+        Claim("round wall-clock duration",
+              anchor="| 每轮时长 |",
+              value=lambda: e0()["round_seconds"],
+              form=lambda v: f"{v:.1f}",
+              files=("10_parameters.md",),
+              alternatives=("102.4",),
+              note="n/R_sym; NOT 100 ms -- that misreading is a 1000x error"),
+        Claim("per-user symbol rate",
+              anchor="| $R_{\\text{sym}}$ |",
+              value=lambda: e0()["symbol_rate"],
+              form=lambda v: f"{v:,.1f}".replace(",", " "),
+              files=("10_parameters.md",),
+              alternatives=("976 562.5", "976562.5", "976,562.5"),
+              note="chip_rate/L, derived not chosen"),
+        Claim("auth key per round (appendix)",
+              anchor="| $a_n$ |",
+              value=lambda: live()["auth_key_length"],
+              form=lambda v: f"{v:.3f}",
+              files=("10_parameters.md",),
+              alternatives=("207.726",),
+              note="l = t + 2*log2(1/eps_auth)"),
+        Claim("messages per round (appendix)",
+              anchor="| 每轮消息数 |",
+              value=lambda: e0()["auth_messages_per_round"],
+              form=lambda v: f"{int(v)}",
+              files=("10_parameters.md",),
+              alternatives=("667",),
+              note="ceil((pe+recon)/B) + 8 control messages"),
+        Claim("bulk messages before the control messages",
+              anchor="| 向上取整 |",
+              value=lambda: math.ceil(
+                  (6.4 * e0()["round_symbols"]
+                   + 1.05 * data("e0_headline").get("i_ab", 0.4844317272526434)
+                   * e0()["round_symbols"]) / (1 << 20)),
+              form=lambda v: f"**{v}**",
+              files=("10_parameters.md",),
+              alternatives=("659",),
+              note="the 659 that makes 667; 658.86 before the ceiling"),
+        Claim("pe transcript bits",
+              anchor="| PE |",
+              value=lambda: plain_sci(6.4 * e0()["round_symbols"], 7),
+              form=lambda v: v.replace("e", "\\times10^{") + "}",
+              files=("10_parameters.md",),
+              alternatives=("6.400000\\times10^{8}",),
+              note="6.4 bit/symbol x 1e8"),
+        Claim("recon transcript bits",
+              anchor="| recon |",
+              value=lambda: 1.05 * 0.4844317272526434 * e0()["round_symbols"],
+              form=lambda v: plain_sci(v, 7).replace("e", "\\times10^{") + "}",
+              files=("10_parameters.md",),
+              alternatives=("5.086533\\times10^{7}",),
+              note="1.05 * I_AB * n with the finite-size I_AB"),
+        Claim("frozen MUI fluctuation reproduced at T = block",
+              anchor="| $10^{8}$（冻结） |",
+              value=lambda: e0()["xi_relative_std"],
+              form=lambda v: tex(v, 4),
+              files=("04_mui_analysis.md",),
+              alternatives=("5.345\\times10^{-1}", "5.35\\times10^{-1}"),
+              note="sqrt(2/(M-1)) = sqrt(2/7); the headline 53.5%"),
+        Claim("MUI quantile at T = block",
+              anchor="| $10^{8}$（冻结） |",
+              value=lambda: e0()["xi_mui_required"],
+              form=lambda v: f"{v:.6f}",
+              files=("04_mui_analysis.md",),
+              alternatives=("0.0691782", "0.0692"),
+              note="must shrink towards the mean as T shrinks, never grow"),
 
         # ---- bootstrap ---------------------------------------------------- #
         Claim("K_0 per-round cost (auth + seed, before reserve)",
@@ -407,6 +532,16 @@ RETIRED: list[Retired] = [
             "budget-limited distance under the asymptotic rate model"),
     Retired(r"55\.5\s*km|66\.5\s*km|68\.5\s*km",
             "same asymptotic-rate F2 table"),
+    Retired(r"647\s*bit",
+            "tag length for a/K=10% computed against the asymptotic K_n; "
+            "the finite-size basis needs 506 bit",
+            exempt=("早期", "旧")),
+    Retired(r"10\.8\\%|205\\%|41\\%",
+            "fragmentation rows computed against the asymptotic K_n"),
+    Retired(r"4\.8\\times10\^\{-5\}|4\.8e-5",
+            "a/K, AXU, against the asymptotic K_n (now 4.817e-5 with 4 digits)"),
+    Retired(r"1\.96\\%",
+            "closed-form limit before the finite-size basis was adopted"),
 ]
 
 

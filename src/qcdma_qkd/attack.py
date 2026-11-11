@@ -412,6 +412,255 @@ def chip_identification_samples(L: int, per_chip_snr: float,
     return float(z ** 2 * float(L) / float(per_chip_snr))
 
 
+# --------------------------------------------------------------------------- #
+# B''. Attack *success probability* at finite n, and the three-way trade-off
+# --------------------------------------------------------------------------- #
+def subspace_signal_ratio(L: int, kappa: np.ndarray,
+                          symbol_var: float = 1.0,
+                          noise_var: float = 1.0) -> dict:
+    r"""Signal fraction of the code subspace, and its limit as ``L`` grows.
+
+    The Moses--Liu ("signal fraction") statistic of the sample covariance is
+
+    .. math::
+
+        \hat r=\frac{\sum_{i>M}\hat\lambda_i}{\sum_{i\le M}\hat\lambda_i}
+        \;\longrightarrow\;
+        r(L)=\frac{(L-M)\,n_v}{M\,(n_v+\sigma^2L\bar\kappa)} .
+
+    Small- and large-``L`` limits
+    -----------------------------
+    At ``L = M`` the numerator vanishes, so ``r(M) = 0``: with exactly as many
+    chips as users the subspace fills the whole space and carries no information.
+    As ``L -> infinity``,
+
+    .. math::
+
+        r(L)\;\nearrow\;\frac{n_v}{M\,\sigma^2\bar\kappa}\;>\;0 ,
+
+    i.e. ``r`` **increases monotonically toward a positive plateau** (``0.125``
+    at ``M=8``, ``n_v=\sigma^2=\bar\kappa=1``).  Two earlier statements in this
+    project were wrong and are corrected here:
+
+    * ``r -> 0``: false.  The limit is ``n_v/(M\sigma^2\bar\kappa)``;
+    * "a larger ``L`` makes the subspace relatively cleaner": also false.  ``r``
+      *rises*, so ``signal_fraction = 1/(1+r)`` *falls* slightly
+      (``0.892`` at ``L=256`` to ``0.889`` at ``L=16384``).
+
+    Practical reading: ``r`` is within 1% of its plateau once
+    ``L \gtrsim 100\,M\sigma^2\bar\kappa/n_v``, i.e. ``L \gtrsim 800`` in the
+    default scenario.  Beyond that, extra chips buy essentially **nothing on this
+    axis** -- while still costing a factor ``L`` in symbol rate.  That negative
+    result is the honest content of the statistic.
+
+    Returns ``r_exact``, ``r_asymptotic`` (the plateau), ``signal_fraction`` and
+    ``saturated`` (``r`` within 1% of the plateau).
+    """
+    kappa = np.atleast_1d(np.asarray(kappa, dtype=float))
+    M = int(kappa.size)
+    if M == 0 or L <= 0:
+        return dict(r_exact=float("inf"), r_asymptotic=float("inf"),
+                    signal_fraction=0.0, saturated=False,
+                    noise_eigs=0, signal_eigs=0)
+    nv, sv = float(noise_var), float(symbol_var)
+    kbar = float(np.mean(kappa))
+    lam_sig = nv + sv * float(L) * kbar
+    noise_sum = float(L - M) * nv
+    signal_sum = float(M) * lam_sig
+    r = noise_sum / signal_sum if signal_sum > 0 else float("inf")
+    plateau = nv / (M * sv * kbar) if (M * sv * kbar) > 0 else float("inf")
+    return dict(r_exact=r, r_asymptotic=plateau,
+                signal_fraction=1.0 / (1.0 + r),
+                saturated=bool(np.isfinite(plateau) and plateau > 0
+                               and r >= 0.99 * plateau),
+                noise_eigs=int(L - M), signal_eigs=M,
+                lambda_signal=lam_sig)
+
+
+def subspace_recovery_probability(L: int, kappa: np.ndarray, n_samples: float,
+                                  symbol_var: float = 1.0,
+                                  noise_var: float = 1.0,
+                                  constant: float = 64.0) -> dict:
+    r"""Probability that the subspace attack succeeds at a given ``n``.
+
+    There is no honest closed form for this probability -- the finite-sample
+    behaviour of the sign iteration is not Gaussian-concentration-friendly.  What
+    *is* rigorous is the **sufficient** condition of
+    :func:`subspace_identification_samples`:
+
+    .. math::
+
+        n \;\ge\; n_{\text{th}}(L)=\frac{4c^2(L+\log(2/\epsilon))}{\text{snr\_eff}^2}
+        \quad\Longrightarrow\quad \|\hat S-\Sigma\|_2\le\tfrac12\lambda_{\text{signal}},
+
+    which implies the subspace is identified (Davis--Kahan) and hence the codes
+    are recoverable up to the ``\pm1`` search.
+
+    We therefore report a **step**, not a smooth curve::
+
+        p_recover(n) = 1  if n >= n_th(L),  else 0
+
+    and separately the *margin* ``n / n_th``.  This is deliberate: quoting a
+    logistic fit would invent a precision we do not have.  The measured
+    transition (``experiments/e12_refresh_period.py``) sits about two orders of
+    magnitude **below** ``n_th``, i.e. the bound is sufficient but very loose;
+    ``conservative_ratio`` records that gap.
+
+    Also returned: ``snr_eff``, ``lambda_signal``, ``lambda_max``,
+    ``r_exact`` from :func:`subspace_signal_ratio`.
+    """
+    spec = observation_covariance(kappa, L, symbol_var, noise_var)
+    n_th = subspace_identification_samples(L, kappa, symbol_var, noise_var,
+                                           constant=constant)
+    ratio = subspace_signal_ratio(L, kappa, symbol_var, noise_var)
+    ok = bool(np.isfinite(n_th) and float(n_samples) >= n_th)
+    return dict(n_samples=float(n_samples), n_threshold=float(n_th),
+                p_recover=1.0 if ok else 0.0,
+                margin=float(n_samples) / n_th if np.isfinite(n_th) and n_th > 0
+                else float("inf"),
+                snr_eff=spec["snr_eff"], lambda_signal=spec["lambda_signal"],
+                lambda_max=spec["lambda_max"], r_exact=ratio["r_exact"],
+                signal_fraction=ratio["signal_fraction"], recovered=ok)
+
+
+def three_way_tradeoff(L: int, kappa, refresh_periods,
+                       block_symbols: float = 1e8, chip_rate: float = 1e9,
+                       symbol_var: float = 1.0, noise_var: float = 1.0,
+                       eps: float = 1e-12, constant: float = 64.0,
+                       n_interferers: int | None = None) -> dict:
+    r"""The three costs as explicit functions of the **PRF refresh period** ``T``.
+
+    ``T`` = how many symbols pass before the PRF re-draws the codebook from the
+    seed.  It is the one knob that trades all three objectives, so the whole
+    analysis is written as a function of it.
+
+    (a) Security: samples per codebook
+    ---------------------------------
+    Eve can only average over the symbols that share **one** code.  So the
+    sample count she gets is ``n = min(T, block)``, and the attack succeeds when
+    that clears the subspace-identification threshold
+
+    .. math::
+
+        n_{\text{th}}(L)=\frac{4c^2\bigl(L+\log(2/\epsilon)\bigr)}
+                              {\text{snr\_eff}(L)^2} .
+
+    Since ``n_{\text{th}}`` is **independent of T**, the condition is a clean
+    threshold in the refresh period itself:
+
+    .. math::
+
+        T \;<\; n_{\text{th}}(L)\quad\Longrightarrow\quad\text{attack fails}.
+
+    This is the honest statement of the security leg: it is a step, and the
+    margin is ``T / n_th``.  The measured transition sits far below ``n_th``
+    (the concentration constant ``4c^2`` is loose), so ``T`` must be *much*
+    smaller than the quoted value -- never read ``n_th`` as the safe ``T``.
+
+    (b) MUI: fluctuation shrinks as ``1/sqrt(F)``, ``F = block/T``
+    -------------------------------------------------------------
+    .. math::
+
+        \text{rel.std}[\xi_{\text{block}}]
+        =\sqrt{\frac{2\sum_j\kappa_j^2}{(\sum_j\kappa_j)^2}}\cdot\frac{1}{\sqrt F}
+        =\sqrt{\frac{2\sum_j\kappa_j^2}{(\sum_j\kappa_j)^2}}\sqrt{\frac{T}{B}} .
+
+    **This is the key identity**: refining the refresh (smaller ``T``, larger
+    ``F``) is the *only* way to stabilise the MUI.  The mean
+    ``(1/L)\sum_j\kappa_j`` does not change at all.  So on the MUI axis a small
+    ``T`` is strictly good.
+
+    (c) Compute: PRF throughput ``M L / T`` bits per symbol
+    ------------------------------------------------------
+    .. math::
+
+        \text{PRF}(T)=\frac{M\,L}{T}\ \text{[bits/symbol]},
+        \qquad \text{rate}=\frac{M\,L\,R_c/L}{T}=\frac{M R_c}{T}\ \text{[bit/s]} .
+
+    So PRF cost is ``1/T``: a small ``T`` is strictly bad.
+
+    Conflict
+    --------
+    ``T`` is therefore pushed **down** by MUI stability and **up** by PRF cost,
+    and the security constraint only requires ``T < n_{\text{th}}``.  There is no
+    unique optimum without a price on PRF throughput; what the analysis gives is
+    the feasible interval
+
+    .. math::
+
+        T \;\le\; \min\bigl(n_{\text{th}}(L),\; T_{\text{PRF budget}}\bigr),
+
+    where the second term is set by whatever PRF throughput hardware allows.
+
+    Returns
+    -------
+    dict of arrays keyed by ``T``, plus the per-``T`` table under ``rows``.
+    Each row: ``T``, ``n_samples_per_codebook``, ``n_threshold``,
+    ``p_recover``, ``margin``, ``n_frames``, ``xi_mean``, ``xi_rel_std``,
+    ``xi_eps``, ``prf_bits_per_symbol``, ``prf_bit_per_s``,
+    ``eve_flops_per_block``, ``bob_flops_per_block``.
+    """
+    Ts = np.atleast_1d(np.asarray(refresh_periods, dtype=float))
+    kappa = np.atleast_1d(np.asarray(kappa, dtype=float))
+    M = int(kappa.size)
+    L = int(L)
+    # The MUI leg sees interferers only; the attack leg sees everybody.
+    K = int(n_interferers) if n_interferers is not None else max(M - 1, 1)
+    kappa_mui = kappa[:K]
+    spec = observation_covariance(kappa, L, symbol_var, noise_var)
+    n_th = subspace_identification_samples(L, kappa, symbol_var, noise_var,
+                                           eps=eps, constant=constant)
+    xi_mean = float(np.sum(kappa_mui) / L)
+    rel_std1 = float(np.sqrt(2.0 * np.sum(kappa_mui ** 2))
+                     / np.sum(kappa_mui)) if np.sum(kappa_mui) > 0 else 0.0
+    symbol_rate = chip_rate / float(L)
+
+    out = dict(T=Ts, rows=[], n_interferers=K)
+    for T in Ts:
+        T = max(float(T), 1.0)
+        n_sym = float(min(T, block_symbols))
+        F = max(block_symbols / T, 1.0)
+        ok = bool(np.isfinite(n_th) and n_sym < n_th)
+        from scipy import stats
+        if np.allclose(kappa_mui, kappa_mui[:1]):
+            dof = int(round(F)) * K
+            xi_eps = float(kappa_mui[0]
+                           * float(stats.chi2.ppf(1.0 - 1e-12, dof))
+                           / (L * float(F)))
+        else:
+            var = 2.0 * np.sum(kappa_mui ** 2) / (L ** 2 * F)
+            a = xi_mean ** 2 / var if var > 0 else np.inf
+            xi_eps = (float(stats.gamma.ppf(1.0 - 1e-12, a=a,
+                                            scale=var / xi_mean))
+                      if np.isfinite(a) else xi_mean)
+        out["rows"].append(dict(
+            T=T,
+            n_samples_per_codebook=n_sym,
+            n_threshold=float(n_th),
+            p_recover=0.0 if ok else 1.0,
+            attack_blocked=ok,
+            margin=n_sym / n_th if np.isfinite(n_th) and n_th > 0 else np.inf,
+            n_frames=float(F),
+            xi_mean=xi_mean,
+            xi_rel_std=rel_std1 / math.sqrt(F),
+            xi_eps=xi_eps,
+            prf_bits_per_symbol=float(M) * L / T,
+            prf_bit_per_s=float(M) * L / T * symbol_rate,
+            refresh_rate_hz=1.0 / T * symbol_rate,
+            eve_flops_per_block=float(L) ** 2 * float(block_symbols),
+            bob_flops_per_block=float(M) * L * float(block_symbols),
+        ))
+    for k in (out["rows"][0] if out["rows"] else {}):
+        out[k] = np.asarray([r[k] for r in out["rows"]])
+    out["L"] = L
+    out["M"] = M
+    out["n_threshold"] = float(n_th)
+    out["snr_eff"] = spec["snr_eff"]
+    out["xi_mean"] = xi_mean
+    out["xi_rel_std_frozen"] = rel_std1
+    return out
+
+
 def blind_attack_envelope(L: int, kappa: np.ndarray, per_chip_snr: float,
                           symbol_var: float = 1.0, noise_var: float = 1.0,
                           eps: float = 1e-12,

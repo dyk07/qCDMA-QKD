@@ -1,6 +1,0 @@
-T=   10    2.14s rec=0.000 found= 0 err=1545.1
-T=  100    1.66s rec=0.000 found= 0 err=461.9
-T=  400   10.91s rec=0.500 found= 8 err=263.8
-T=  500    5.80s rec=1.000 found=16 err=281.7
-T= 1000    4.44s rec=1.000 found=16 err=190.0
-T= 2000    7.13s rec=1.000 found=16 err=122.7

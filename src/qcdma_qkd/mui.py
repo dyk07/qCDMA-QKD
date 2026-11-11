@@ -550,6 +550,7 @@ def xi_vs_block_length_note() -> str:
 def xi_frame_refresh(kappa: np.ndarray, L: int, n_frames: int,
                      n_symbols_per_frame: int = 100,
                      n_codes: int | None = None,
+                     symbol_rate: float | None = None,
                      n_draws: int = 200_000, seed: int = 0) -> dict:
     r"""Block-averaged MUI when the codebook is re-drawn every frame.
 
@@ -607,22 +608,45 @@ def xi_frame_refresh(kappa: np.ndarray, L: int, n_frames: int,
         interferers.  Pass it explicitly when ``kappa`` already includes the
         victim (then ``n_codes = kappa.size``), otherwise the reported PRF cost
         is one code short.
+    symbol_rate : float, optional
+        Per-user symbol rate in symbols/s (``chip_rate / L``).  Required to
+        express ``refresh_rate_hz`` in real time; when omitted it is reported
+        as 0.0 rather than silently as the inverse period in symbol units.
 
     Returns
     -------
     dict
         ``xi_mean``, ``xi_std``, ``xi_rel_std``, ``xi_eps`` (the ``eps=1e-12``
         upper quantile), ``refresh_period`` (symbols between refreshes, low
-        =. good for security), ``refresh_rate_hz`` (PRF refreshes per second)
-        and ``prf_throughput_bits_per_s`` (``M * L / 8`` bytes per refresh).
+        =. good for security), ``refresh_rate_hz`` (refreshes per **second**;
+        0.0 when ``symbol_rate`` is not supplied) and
+        ``prf_throughput_bits_per_s`` (``M * L`` bits per refresh, converted to
+        a rate with ``symbol_rate``; also 0.0 without it).
+
+    Note
+    ----
+    An earlier version returned ``1 / n_symbols_per_frame`` under the name
+    ``refresh_rate_hz``.  That is a rate per *symbol*, not per second: it was
+    low by a factor ``symbol_rate`` = 976 562.5 at the default settings, and
+    the docs copied the number as Hz.  ``attack.three_way_tradeoff`` was
+    already correct (``1/T * symbol_rate``), so the two disagreed by exactly
+    that factor.  Both now require an explicit ``symbol_rate``.
     """
     kappa = np.atleast_1d(np.asarray(kappa, dtype=float))
     F = max(int(n_frames), 1)
     M = int(n_codes) if n_codes is not None else int(kappa.size) + 1
+    period = max(int(n_symbols_per_frame), 1)
+    # Rates need a real time base.  Without ``symbol_rate`` we cannot convert
+    # symbols to seconds, so report 0.0 instead of a mislabelled number.
+    rate_hz = (0.0 if symbol_rate is None
+               else float(symbol_rate) / float(period))
+    prf_bit_per_s = (0.0 if symbol_rate is None
+                     else float(M * L) * float(symbol_rate) / float(period))
     if kappa.size == 0:
         return dict(xi_mean=0.0, xi_std=0.0, xi_rel_std=0.0, xi_eps=0.0,
                     refresh_period=int(n_symbols_per_frame),
-                    refresh_rate_hz=0.0, prf_throughput_bits_per_s=0.0,
+                    refresh_rate_hz=rate_hz,
+                    prf_throughput_bits_per_s=prf_bit_per_s,
                     n_frames=F, n_symbols_per_frame=int(n_symbols_per_frame),
                     n_codes=M)
 
@@ -644,10 +668,8 @@ def xi_frame_refresh(kappa: np.ndarray, L: int, n_frames: int,
                 xi_rel_std=float(np.sqrt(var) / mean) if mean > 0 else 0.0,
                 xi_eps=xi_eps,
                 refresh_period=int(n_symbols_per_frame),
-                refresh_rate_hz=0.0 if n_symbols_per_frame <= 0 else
-                1.0 / float(n_symbols_per_frame),
-                prf_throughput_bits_per_s=float(M * L * 8)
-                / float(max(n_symbols_per_frame, 1)),
+                refresh_rate_hz=rate_hz,
+                prf_throughput_bits_per_s=prf_bit_per_s,
                 n_frames=F, n_symbols_per_frame=int(n_symbols_per_frame),
                 n_codes=M)
 
