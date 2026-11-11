@@ -203,7 +203,9 @@ def simulate_round(round_index: int, seed: bytes, n_symbols: int,
                    prev_codebook: np.ndarray | None = None,
                    rate_model: str = "finite",
                    eps_sm: float = 1e-10,
-                   eps_pa: float = 1e-12) -> RoundResult:
+                   eps_pa: float = 1e-12,
+                   eps_pe: float | None = None,
+                   xi_mui_model: str = "quantile") -> RoundResult:
     """One closed-loop round with the real budget and MUI accounting.
 
     ``K_n`` is *computed*, not supplied: it is the raw post-PA key produced by
@@ -223,7 +225,34 @@ def simulate_round(round_index: int, seed: bytes, n_symbols: int,
     ``"asymptotic"``
         Kept for the analytic comparisons in ``docs/03`` and for regression
         tests that pin the closed form.  Never use it for headline numbers.
+
+    ``eps_pe``
+        When given, the rate is evaluated at the **parameter-estimation
+        confidence bounds** (``T_lb``, ``xi_ub`` from the exact chi-square
+        method) instead of the nominal ``T`` and ``xi``.  Without it the
+        claimed ``eps_pe`` never appears in the security statement -- the
+        protocol would be quoting a target it does not provision for.
+
+        This is the default for the closed loop; pass ``None`` to reproduce
+        the older nominal-parameter behaviour.  The PE sample size is
+        ``pe_sample_fraction * n_symbols``, which is a **design constant** and
+        does not depend on the rate, so there is no circular dependency: the
+        confidence bounds depend only on the nominal ``(T, xi)`` and ``n_pe``.
+        The protocol-level *consistency* check (estimated noise must not exceed
+        the bound) is a separate concern, handled by ``pe_reject_at``.
+
+    ``xi_mui_model``
+        ``"quantile"`` (default) uses :func:`mui.required_xi`, which is the
+        **exact** ``chi^2`` quantile for equal interferer powers (the default
+        scenario) and a moment-matched Gamma for unequal ones.  ``"bound"``
+        uses :func:`mui.xi_block_bound` (Laurent--Massart), a *theorem* valid
+        for arbitrary ``kappa`` but ~27% looser at the default settings.
+        Both are quantiles (never the mean); this switch only trades tightness
+        for distribution-free rigour.
     """
+    if xi_mui_model not in ("quantile", "bound"):
+        raise ValueError("xi_mui_model must be 'quantile' or 'bound', got %r"
+                         % (xi_mui_model,))
     L = cfg_cdma.spreading_factor
     # --- codebook -------------------------------------------------------- #
     # ``prev_codebook`` carries the previous round's codes so that the
@@ -238,7 +267,10 @@ def simulate_round(round_index: int, seed: bytes, n_symbols: int,
     kappa = (mui.uniform_kappa(cfg_cdma.n_users - 1, 1.0)
              if interferer_powers is None
              else np.asarray(interferer_powers, dtype=float))
-    xi_mui = mui.required_xi(eps_mui, kappa, L)
+    if xi_mui_model == "bound":
+        xi_mui = mui.xi_block_bound(eps_mui, kappa, L)
+    else:
+        xi_mui = mui.required_xi(eps_mui, kappa, L)
     # --- quantum layer ---------------------------------------------------- #
     T = cvqkd.total_transmittance(distance_km, cfg_cv.alpha_db_per_km, cfg_cv.eta)
     xi_tot = cfg_cv.excess_noise + xi_mui
@@ -249,7 +281,8 @@ def simulate_round(round_index: int, seed: bytes, n_symbols: int,
         r = cvqkd.finite_size_rate(
             cfg_cv.V_A, T, xi_tot, cfg_cv.eta, cfg_cv.v_el, cfg_cv.beta,
             cfg_cv.detection, n_symbols=int(n_symbols), eps_sm=eps_sm,
-            eps_pa=eps_pa, sample_fraction=cfg_bud.pe_sample_fraction)
+            eps_pa=eps_pa, sample_fraction=cfg_bud.pe_sample_fraction,
+            eps_pe=eps_pe)
     else:
         raise ValueError("rate_model must be 'finite' or 'asymptotic', got %r"
                          % (rate_model,))
@@ -287,7 +320,12 @@ def simulate_round(round_index: int, seed: bytes, n_symbols: int,
                                    key_material=key_material,
                                    code_model=cfg_cdma.code_model,
                                    refresh_fraction=cfg_cdma.refresh_fraction,
-                                   rate_model=rate_model))
+                                   rate_model=rate_model,
+                                   eps_pe=eps_pe,
+                                   pe_applied=bool(r.get("pe_applied", False)),
+                                   T_used=r.get("T_used", T),
+                                   xi_used=r.get("xi_used", xi_tot),
+                                   xi_mui_model=xi_mui_model))
 
 
 # --------------------------------------------------------------------------- #
@@ -302,7 +340,8 @@ def run_loop(n_rounds: int, k0_bits: int, cfg_cv: CVQKDConfig,
              tamper_events: int = 1,
              n_k0_roots: int = 1,
              recover: bool = False,
-             eps_pe: float = 1e-10,
+             eps_pe: float | None = 1e-10,
+             xi_mui_model: str = "quantile",
              pe_reject_at: int | None = None,
              near_miss_ratio: float = 1e-3,
              enforce_budget: bool = True,
@@ -318,6 +357,29 @@ def run_loop(n_rounds: int, k0_bits: int, cfg_cv: CVQKDConfig,
     * ``K_n`` is regenerated from scratch by the quantum block, so the loop does
       **not** consume net output in steady state -- it consumes only the
       ``a_n + c_n`` slice of each round's own key.
+
+    ``eps_pe`` (default ``1e-10``)
+        The rate is evaluated at the PE confidence bounds, so the claimed
+        ``eps_pe`` is actually provisioned for.  Pass ``None`` to reproduce the
+        older nominal-parameter behaviour (``S = 0.033316`` instead of
+        ``0.024110`` at the default 25 km / ``n = 1e8`` setting, i.e. the
+        nominal figure overstates the key by 38%).
+
+        This parameter used to be accepted and then **silently dropped**: it
+        was never forwarded to :func:`simulate_round`, which did not even have
+        a matching argument.  Every closed-loop number therefore quoted
+        ``eps_pe = 1e-10`` while being computed at nominal ``T`` and ``xi``.
+
+    ``xi_mui_model``
+        ``"quantile"`` (default, exact ``chi^2`` for equal powers) or
+        ``"bound"`` (Laurent--Massart, distribution-free).  Both are quantiles;
+        see :func:`simulate_round`.
+
+    ``pe_reject_at``
+        A *different* concern from ``eps_pe``: ``eps_pe`` makes the rate
+        conservative, whereas ``pe_reject_at`` models the protocol-level check
+        (the estimated noise exceeds the design value beyond the bound, so the
+        round is aborted).  Neither substitutes for the other.
 
     Declared failure modes (now actually enforced)
     ----------------------------------------------
@@ -385,7 +447,8 @@ def run_loop(n_rounds: int, k0_bits: int, cfg_cv: CVQKDConfig,
                             distance_km, interferer_powers, eps_mui,
                             tamper=fire, auth_key=auth_key,
                             prev_codebook=prev_codebook,
-                            rate_model=rate_model, eps_sm=eps_sm, eps_pa=eps_pa)
+                            rate_model=rate_model, eps_sm=eps_sm, eps_pa=eps_pa,
+                            eps_pe=eps_pe, xi_mui_model=xi_mui_model)
         # --- PE rejection (modelled): estimated excess noise beyond the
         # eps_pe confidence bound -> the design noise was wrong, abort.
         if pe_reject_at == n:

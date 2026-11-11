@@ -42,18 +42,35 @@ def main() -> dict:
 
     # --- authentication ----------------------------------------------------- #
     # The budget numbers must come from the SAME rate model the closed loop
-    # uses (finite-size with the PE sample removed), otherwise the headline
-    # K_n and the simulated K_n disagree.
+    # uses (finite-size, PE sample removed, PE confidence bounds applied),
+    # otherwise the headline K_n and the simulated K_n disagree.
+    #
+    # ``eps_pe`` is the loop default now.  Without it the loop reports
+    # S = 0.033316 while claiming eps_pe = 1e-10 in the security statement --
+    # i.e. it quotes a target it does not provision for.  Both values are kept
+    # so the price of the correction stays visible.
     n_symbols = 10 ** 8
     sym_rate = cdma.symbol_rate()
     T25 = cvqkd.total_transmittance(25.0, cfg.alpha_db_per_km, cfg.eta)
     asym25 = cvqkd.asymptotic_rate(cfg.V_A, T25, cfg.excess_noise + xi_req,
                                    cfg.eta, cfg.v_el, cfg.beta, cfg.detection)
-    fin25 = cvqkd.finite_size_rate(cfg.V_A, T25, cfg.excess_noise + xi_req,
-                                   cfg.eta, cfg.v_el, cfg.beta, cfg.detection,
-                                   n_symbols=n_symbols, eps_sm=sec.eps_sm,
-                                   eps_pa=sec.eps_pa,
-                                   sample_fraction=bcfg.pe_sample_fraction)
+    fin_nominal = cvqkd.finite_size_rate(
+        cfg.V_A, T25, cfg.excess_noise + xi_req,
+        cfg.eta, cfg.v_el, cfg.beta, cfg.detection,
+        n_symbols=n_symbols, eps_sm=sec.eps_sm, eps_pa=sec.eps_pa,
+        sample_fraction=bcfg.pe_sample_fraction)
+    fin25 = cvqkd.finite_size_rate(
+        cfg.V_A, T25, cfg.excess_noise + xi_req,
+        cfg.eta, cfg.v_el, cfg.beta, cfg.detection,
+        n_symbols=n_symbols, eps_sm=sec.eps_sm, eps_pa=sec.eps_pa,
+        sample_fraction=bcfg.pe_sample_fraction, eps_pe=sec.eps_qkd)
+    # Genuinely distribution-free variant: Laurent-Massart MUI bound + PE bounds
+    xi_req_bound = mui.xi_block_bound(1e-12, kappa, L)
+    fin_strict = cvqkd.finite_size_rate(
+        cfg.V_A, T25, cfg.excess_noise + xi_req_bound,
+        cfg.eta, cfg.v_el, cfg.beta, cfg.detection,
+        n_symbols=n_symbols, eps_sm=sec.eps_sm, eps_pa=sec.eps_pa,
+        sample_fraction=bcfg.pe_sample_fraction, eps_pe=sec.eps_qkd)
     i_ab25 = fin25["I_AB"]
     b = budget.round_budget(fin25["S_pos"] * n_symbols, n_symbols, i_ab25, bcfg)
     snap.update(round_symbols=n_symbols,
@@ -61,9 +78,14 @@ def main() -> dict:
                 chip_rate=cdma.chip_rate,
                 symbol_rate=sym_rate,
                 rate_25km_with_mui_asym=asym25["S_pos"],
+                rate_25km_with_mui_finite_nominal=fin_nominal["S_pos"],
                 rate_25km_with_mui_finite=fin25["S_pos"],
-                finite_size_factor=fin25["S_pos"] / asym25["S_pos"],
+                rate_25km_with_mui_strict=fin_strict["S_pos"],
+                mui_bound_gap=xi_req_bound / xi_req - 1.0,
+                pe_penalty_factor=fin25["S_pos"] / fin_nominal["S_pos"],
+                finite_size_factor=fin_nominal["S_pos"] / asym25["S_pos"],
                 key_bits_per_round=b["K"],
+                key_bits_per_round_nominal=(fin_nominal["S_pos"] * n_symbols),
                 key_bits_per_round_asym=asym25["S_pos"] * n_symbols,
                 auth_bits_per_round=b["a"],
                 auth_messages_per_round=b["n_messages"],
