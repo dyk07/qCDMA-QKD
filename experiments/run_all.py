@@ -23,7 +23,8 @@ sys.path.insert(0, str(HERE))
 EXPERIMENTS = ["e0_headline", "e1_cvqkd_baseline", "e2_mui", "e3_mitm_auth", "e4_refresh",
                "e5_budget", "e6_epsilon", "e7_loop", "e8_state_prep",
                "e9_spreading_tradeoff", "e10_model_vs_bound",
-               "e11_covariance_attack", "e12_refresh_period"]
+               "e11_covariance_attack", "e12_refresh_period",
+               "e13_kappa_concentration", "e14_feasibility"]
 
 
 def run(names: list[str]) -> int:

@@ -1,0 +1,269 @@
+{
+  "distance_km": 25.0,
+  "n_symbols": 100000000,
+  "L": 1024,
+  "n_users": 8,
+  "n_interferers": 7,
+  "eps_mui": 1e-12,
+  "eps_ref": 1e-06,
+  "mc_draws": 2000000,
+  "calibration": [
+    {
+      "eps": 0.0001,
+      "exact": 0.029177249911352704,
+      "reference": 0.029184624893866043,
+      "rel_error": 0.00025276482656000354
+    },
+    {
+      "eps": 1e-06,
+      "exact": 0.03957210081456516,
+      "reference": 0.03958162808737094,
+      "rel_error": 0.00024075731663630862
+    },
+    {
+      "eps": 1e-09,
+      "exact": 0.054565215893292086,
+      "reference": 0.054577180375364936,
+      "rel_error": 0.00021926939858984973
+    },
+    {
+      "eps": 1e-12,
+      "exact": 0.06917819898117773,
+      "reference": 0.06919199395385453,
+      "rel_error": 0.0001994121396620141
+    }
+  ],
+  "mc_corroboration": [
+    {
+      "ratio": 1.0,
+      "eps": 0.0001,
+      "mc": 0.02931293825219026,
+      "reference": 0.029184624893866043,
+      "mc_is_above_bound": true
+    },
+    {
+      "ratio": 0.8,
+      "eps": 0.0001,
+      "mc": 0.03449881426942686,
+      "reference": 0.034511128324530085,
+      "mc_is_above_bound": true
+    },
+    {
+      "ratio": 0.5,
+      "eps": 0.0001,
+      "mc": 0.05663408595259769,
+      "reference": 0.05673876831175549,
+      "mc_is_above_bound": true
+    },
+    {
+      "ratio": 0.3,
+      "eps": 0.0001,
+      "mc": 0.07387124054606414,
+      "reference": 0.07521317317616238,
+      "mc_is_above_bound": true
+    }
+  ],
+  "identity": [
+    {
+      "ratio": 1.0,
+      "nu": 7.0,
+      "n_interferers": 7,
+      "rel_std": 0.5345224838248488,
+      "rel_std_predicted": 0.5345224838248488,
+      "rel_std_identity_error": 0.0,
+      "xi_quantile_reference": 0.03958162808737094,
+      "xi_quantile_gamma": 0.03957210081456516,
+      "xi_quantile_bound": 0.053026488891091406,
+      "gamma_error": -0.00024069936650283896,
+      "bound_error": 0.3396742744902461
+    },
+    {
+      "ratio": 0.8,
+      "nu": 5.8795352823540625,
+      "n_interferers": 7,
+      "rel_std": 0.5832348915556336,
+      "rel_std_predicted": 0.5832348915556336,
+      "rel_std_identity_error": 0.0,
+      "xi_quantile_reference": 0.049727040239293696,
+      "xi_quantile_gamma": 0.04415691039544855,
+      "xi_quantile_bound": 0.07559494974758482,
+      "gamma_error": -0.11201410373593279,
+      "bound_error": 0.5201980528865384
+    },
+    {
+      "ratio": 0.5,
+      "nu": 2.9534883720930223,
+      "n_interferers": 7,
+      "rel_std": 0.8229005737819781,
+      "rel_std_predicted": 0.8229005737819781,
+      "rel_std_identity_error": 0.0,
+      "xi_quantile_reference": 0.08709353354329732,
+      "xi_quantile_gamma": 0.07066778738240173,
+      "xi_quantile_bound": 0.13159103730729152,
+      "gamma_error": -0.18859891765362535,
+      "bound_error": 0.5109162753383165
+    },
+    {
+      "ratio": 0.3,
+      "nu": 1.856330720471433,
+      "n_interferers": 7,
+      "rel_std": 1.037976023864353,
+      "rel_std_predicted": 1.037976023864353,
+      "rel_std_identity_error": 0.0,
+      "xi_quantile_reference": 0.11741765809540133,
+      "xi_quantile_gamma": 0.09999706547110258,
+      "xi_quantile_bound": 0.17638146986121428,
+      "gamma_error": -0.14836433383933267,
+      "bound_error": 0.5021715874958528
+    },
+    {
+      "ratio": 0.1,
+      "nu": 1.222221977777802,
+      "n_interferers": 7,
+      "rel_std": 1.279204426054099,
+      "rel_std_predicted": 1.279204426054099,
+      "rel_std_identity_error": 0.0,
+      "xi_quantile_reference": 0.148616142539663,
+      "xi_quantile_gamma": 0.13899293505618374,
+      "xi_quantile_bound": 0.22279747249272897,
+      "gamma_error": -0.06475210107751916,
+      "bound_error": 0.49914719010600295
+    }
+  ],
+  "rate": [
+    {
+      "ratio": 1.0,
+      "nu": 7.0,
+      "rel_std": 0.5345224838248488,
+      "xi_quantile_gamma": 0.06917819898117773,
+      "xi_bound": 0.0879657626560596,
+      "rate_gamma": 0.024106699593531917,
+      "rate_bound": 0.01051233383446246,
+      "bit_per_s_gamma": 23541.698821808513,
+      "bit_per_s_bound": 10265.951010217246,
+      "fraction_of_equal_bound": 1.0,
+      "fraction_of_equal_gamma": 1.0
+    },
+    {
+      "ratio": 0.9,
+      "nu": 6.705255825132286,
+      "rel_std": 0.546144194881581,
+      "xi_quantile_gamma": 0.07140989219896866,
+      "xi_bound": 0.10700001682064844,
+      "rate_gamma": 0.02245560150685651,
+      "rate_bound": 0.0,
+      "bit_per_s_gamma": 21929.29834653956,
+      "bit_per_s_bound": 0.0,
+      "fraction_of_equal_bound": 0.0,
+      "fraction_of_equal_gamma": 0.9315087459289361
+    },
+    {
+      "ratio": 0.8,
+      "nu": 5.8795352823540625,
+      "rel_std": 0.5832348915556336,
+      "xi_quantile_gamma": 0.07879061623982568,
+      "xi_bound": 0.1320773265219936,
+      "rate_gamma": 0.017066948367187435,
+      "rate_bound": 0.0,
+      "bit_per_s_gamma": 16666.94176483148,
+      "bit_per_s_bound": 0.0,
+      "fraction_of_equal_bound": 0.0,
+      "fraction_of_equal_gamma": 0.7079753203448339
+    },
+    {
+      "ratio": 0.7,
+      "nu": 4.8043346804276545,
+      "rel_std": 0.6452059607715371,
+      "xi_quantile_gamma": 0.09200167876230002,
+      "xi_bound": 0.1631247757596339,
+      "rate_gamma": 0.0076763437120375725,
+      "rate_bound": 0.0,
+      "bit_per_s_gamma": 7496.429406286692,
+      "bit_per_s_bound": 0.0,
+      "fraction_of_equal_bound": 0.0,
+      "fraction_of_equal_gamma": 0.3184319646185501
+    },
+    {
+      "ratio": 0.5,
+      "nu": 2.9534883720930223,
+      "rel_std": 0.8229005737819781,
+      "xi_quantile_gamma": 0.13600079839676738,
+      "xi_bound": 0.23902472764258972,
+      "rate_gamma": 0.0,
+      "rate_bound": 0.0,
+      "bit_per_s_gamma": 0.0,
+      "bit_per_s_bound": 0.0,
+      "fraction_of_equal_bound": 0.0,
+      "fraction_of_equal_gamma": 0.0
+    },
+    {
+      "ratio": 0.3,
+      "nu": 1.856330720471433,
+      "rel_std": 1.037976023864353,
+      "xi_quantile_gamma": 0.20139574725088882,
+      "xi_bound": 0.3240784237862329,
+      "rate_gamma": 0.0,
+      "rate_bound": 0.0,
+      "bit_per_s_gamma": 0.0,
+      "bit_per_s_bound": 0.0,
+      "fraction_of_equal_bound": 0.0,
+      "fraction_of_equal_gamma": 0.0
+    },
+    {
+      "ratio": 0.1,
+      "nu": 1.222221977777802,
+      "rel_std": 1.279204426054099,
+      "xi_quantile_gamma": 0.2904890311935611,
+      "xi_bound": 0.4118327610250444,
+      "rate_gamma": 0.0,
+      "rate_bound": 0.0,
+      "bit_per_s_gamma": 0.0,
+      "bit_per_s_bound": 0.0,
+      "fraction_of_equal_bound": 0.0,
+      "fraction_of_equal_gamma": 0.0
+    },
+    {
+      "ratio": 0.0001,
+      "nu": 1.000200020002,
+      "rel_std": 1.4140721480872187,
+      "xi_quantile_gamma": 0.34750509577628863,
+      "xi_bound": 0.45642534981198885,
+      "rate_gamma": 0.0,
+      "rate_bound": 0.0,
+      "bit_per_s_gamma": 0.0,
+      "bit_per_s_bound": 0.0,
+      "fraction_of_equal_bound": 0.0,
+      "fraction_of_equal_gamma": 0.0
+    }
+  ],
+  "ratio_star": 0.9180775965175831,
+  "nu_star": 6.802531317928722,
+  "false_security": [
+    {
+      "ratio": 0.8,
+      "nu": 5.8795352823540625,
+      "xi_design": 0.06917819898117773,
+      "xi_actually_required": 0.1320773265219936,
+      "understatement": 0.9092333779595752,
+      "rate_if_correctly_provisioned": 0.0
+    },
+    {
+      "ratio": 0.5,
+      "nu": 2.9534883720930223,
+      "xi_design": 0.06917819898117773,
+      "xi_actually_required": 0.23902472764258972,
+      "understatement": 2.455203101017771,
+      "rate_if_correctly_provisioned": 0.0
+    },
+    {
+      "ratio": 0.3,
+      "nu": 1.856330720471433,
+      "xi_design": 0.06917819898117773,
+      "xi_actually_required": 0.3240784237862329,
+      "understatement": 3.684690098312756,
+      "rate_if_correctly_provisioned": 0.0
+    }
+  ],
+  "xi_design_equal_power": 0.06917819898117773,
+  "runtime_s": 2.3985373369998797
+}

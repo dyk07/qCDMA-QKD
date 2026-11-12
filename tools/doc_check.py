@@ -252,7 +252,7 @@ def build_claims() -> list[Claim]:
               note="207.7 bit over the finite-size K_n; independent of the "
                    "fragmentation B"),
         Claim("auth share a/K, OTP, finite-size",
-              anchor="OTP（最坏情形） | 667",
+              anchor="| OTP（最坏情形） | $2^{20}$ | 667",
               value=lambda: (e0()["auth_messages_per_round"] * 128.0)
                             / e0()["key_bits_per_round"],
               form=lambda v: tex(v, 2),
@@ -636,6 +636,98 @@ def build_claims() -> list[Claim]:
               form=lambda v: f"{v / 1e4:.3f}\\times10^4",
               alternatives=("6.748\\times10^4", "6.7\\times10^4"),
               files=("07_results.md", "05_security.md")),
+
+        # ---- E13: interferer power imbalance ----------------------------- #
+        Claim("E13 feasible power-ratio bound at 25 km",
+              anchor="可行域",
+              value=lambda: data("e13_kappa_concentration")["ratio_star"],
+              form=lambda v: f"{v:.4f}",
+              alternatives=("0.9181",),
+              files=("04_mui_analysis.md", "07_results.md", "11_conclusions.md"),
+              note="smallest power ratio for which the strict route still "
+                   "yields a positive 25 km rate"),
+        Claim("E13 effective interferer count at the bound",
+              anchor="可行域",
+              value=lambda: data("e13_kappa_concentration")["nu_star"],
+              form=lambda v: f"{v:.4f}",
+              alternatives=("6.8025",),
+              files=("04_mui_analysis.md", "07_results.md", "11_conclusions.md")),
+        Claim("E13 equal-power design excess noise",
+              anchor="设计（$\\xi=0.0692$）",
+              value=lambda: data("e13_kappa_concentration")[
+                  "xi_design_equal_power"],
+              form=lambda v: f"{v:.4f}",
+              alternatives=("0.0692",),
+              files=("04_mui_analysis.md", "11_conclusions.md")),
+        Claim("E13 Gamma shortfall at ratio 0.5 (worst case)",
+              anchor="| 0.5 | 2.9535 | 0.8229 |",
+              value=lambda: [r for r in data("e13_kappa_concentration")["identity"]
+                             if r["ratio"] == 0.5][0]["gamma_error"],
+              form=lambda v: f"{100 * v:.2f}%",
+              alternatives=("-18.86%", "−18.86%", "-18.9%", "−18.9%"),
+              files=("07_results.md",),
+              note="the moment-matched Gamma understates the tail quantile; "
+                   "the worst case is interior, near ratio 0.5"),
+        Claim("E13 Laurent-Massart looseness at equal power",
+              anchor="| 1.0 | 7.0000 | 0.5345 |",
+              value=lambda: [r for r in data("e13_kappa_concentration")["identity"]
+                             if r["ratio"] == 1.0][0]["bound_error"],
+              form=lambda v: f"+{100 * v:.2f}%",
+              alternatives=("+33.97%", "+34.0%"),
+              files=("07_results.md",)),
+        Claim("E13 equal-power rate under the strict route",
+              anchor="严格路线每用户速率",
+              value=lambda: data("e13_kappa_concentration")["rate"][0]["bit_per_s_bound"],
+              form=lambda v: f"{v:,.0f}",
+              alternatives=("10,266",),
+              files=("07_results.md",),
+              note="comma thousands separator: the audit splits spaces"),
+        Claim("E13 equal-power rate under the Gamma route",
+              anchor="严格路线每用户速率",
+              value=lambda: data("e13_kappa_concentration")["rate"][0]["bit_per_s_gamma"],
+              form=lambda v: f"{v:,.0f}",
+              alternatives=("23,542",),
+              files=("07_results.md",)),
+        Claim("E13 false-security gap at ratio 0.8",
+              anchor="$+91\\%$（$x=0.8$）",
+              value=lambda: [r for r in data("e13_kappa_concentration")
+                             ["false_security"] if r["ratio"] == 0.8][0][
+                                 "understatement"],
+              form=lambda v: f"{100 * v:+.0f}\\%",
+              alternatives=("+91\\%", "+91%"),
+              files=("07_results.md",)),
+        Claim("E13 reference calibration error",
+              anchor="最大相对偏差仅 $",
+              value=lambda: max(abs(r["rel_error"]) for r in
+                                data("e13_kappa_concentration")["calibration"]),
+              form=lambda v: f"+{100 * v:.2f}\\%",
+              alternatives=("+0.03\\%", "+0.03%"),
+              files=("07_results.md",),
+              note="saddlepoint vs exact chi2_K/L -- the reference must be "
+                   "near-exact where the answer is known"),
+
+        # ---- feasibility region (10_parameters.md section 8) -------------- #
+        Claim("eps wall: max rounds at the default budget",
+              anchor="默认安全参数下协议最多只能跑",
+              value=lambda: live()["max_rounds"],
+              form=lambda v: f"{v:.0f} 轮",
+              alternatives=("3 轮",),
+              files=("10_parameters.md",),
+              note="union bound N*eps_round <= eps_total with eps_round=3.05e-10"),
+        Claim("C4 budget-limited reach at n=1e8",
+              anchor="默认场景（$M=8$, $L=1024$）的闭环可达距离",
+              value=lambda: data("e7_loop")["f2_budget_limit_km"][-1],
+              form=lambda v: f"{v:.1f} km",
+              alternatives=("41.0 km",),
+              files=("10_parameters.md",),
+              note="this is a QUANTUM death (S=0), not a budget death: "
+                   "at 42 km K_n is already 0"),
+        Claim("extractor f_min in the feasibility section",
+              anchor="$f\\ge f_{\\min}=",
+              value=lambda: data("e10_model_vs_bound")["refresh"][2]["f_min_rigorous"],
+              form=lambda v: f"{v:.6f}",
+              alternatives=("0.788574", "0.7886"),
+              files=("10_parameters.md",)),
     ]
 
 

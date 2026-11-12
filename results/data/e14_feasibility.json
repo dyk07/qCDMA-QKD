@@ -1,0 +1,504 @@
+{
+  "eps_round": 3.05e-10,
+  "eps_target": 1e-09,
+  "max_rounds": 3,
+  "rounds": [
+    {
+      "rounds": 1,
+      "eps_round_required": 1e-09
+    },
+    {
+      "rounds": 10,
+      "eps_round_required": 1e-10
+    },
+    {
+      "rounds": 100,
+      "eps_round_required": 1.0000000000000001e-11
+    },
+    {
+      "rounds": 1000,
+      "eps_round_required": 1e-12
+    },
+    {
+      "rounds": 10000,
+      "eps_round_required": 1e-13
+    },
+    {
+      "rounds": 100000,
+      "eps_round_required": 1e-14
+    }
+  ],
+  "eps_penalty_optimised": {
+    "exact": [
+      {
+        "rounds": 1,
+        "eps_round": 1e-09,
+        "L_star": 1120,
+        "S_star": 0.0396540326132765,
+        "bit_per_s": 35405.386261854015,
+        "fraction_of_1_round": 1.0
+      },
+      {
+        "rounds": 100,
+        "eps_round": 1.0000000000000001e-11,
+        "L_star": 1344,
+        "S_star": 0.03877185467517103,
+        "bit_per_s": 28848.106157121303,
+        "fraction_of_1_round": 0.8147942785813478
+      },
+      {
+        "rounds": 1000,
+        "eps_round": 1e-12,
+        "L_star": 1456,
+        "S_star": 0.038331093900430775,
+        "bit_per_s": 26326.30075579037,
+        "fraction_of_1_round": 0.743567675299012
+      },
+      {
+        "rounds": 10000,
+        "eps_round": 1e-13,
+        "L_star": 1568,
+        "S_star": 0.037892062981702494,
+        "bit_per_s": 24165.85649343271,
+        "fraction_of_1_round": 0.6825474608497396
+      },
+      {
+        "rounds": 100000,
+        "eps_round": 1e-14,
+        "L_star": 1696,
+        "S_star": 0.03781090427657523,
+        "bit_per_s": 22294.16525741464,
+        "fraction_of_1_round": 0.6296828706380903
+      }
+    ],
+    "bound": [
+      {
+        "rounds": 1,
+        "eps_round": 1e-09,
+        "L_star": 1456,
+        "S_star": 0.03970953757642785,
+        "bit_per_s": 27273.034049744405,
+        "fraction_of_1_round": 1.0
+      },
+      {
+        "rounds": 100,
+        "eps_round": 1.0000000000000001e-11,
+        "L_star": 1712,
+        "S_star": 0.03860259365719354,
+        "bit_per_s": 22548.243958641087,
+        "fraction_of_1_round": 0.8267596453520507
+      },
+      {
+        "rounds": 1000,
+        "eps_round": 1e-12,
+        "L_star": 1856,
+        "S_star": 0.03842568883793585,
+        "bit_per_s": 20703.496141129228,
+        "fraction_of_1_round": 0.7591196528911038
+      },
+      {
+        "rounds": 10000,
+        "eps_round": 1e-13,
+        "L_star": 1984,
+        "S_star": 0.037913749720702196,
+        "bit_per_s": 19109.752883418445,
+        "fraction_of_1_round": 0.7006830574318714
+      },
+      {
+        "rounds": 100000,
+        "eps_round": 1e-14,
+        "L_star": 2128,
+        "S_star": 0.03770691038696794,
+        "bit_per_s": 17719.4127758308,
+        "fraction_of_1_round": 0.6497044935855555
+      }
+    ]
+  },
+  "eps_penalty_fixed_L": [
+    {
+      "route": "exact",
+      "rounds": 1,
+      "eps_round": 1e-09,
+      "S": 0.03598808105443859,
+      "bit_per_s": 35144.61040472519,
+      "fraction_of_1_round": 1.0
+    },
+    {
+      "route": "exact",
+      "rounds": 10,
+      "eps_round": 1e-10,
+      "S": 0.03141735826974356,
+      "bit_per_s": 30681.013935296447,
+      "fraction_of_1_round": 0.8729934286359706
+    },
+    {
+      "route": "exact",
+      "rounds": 100,
+      "eps_round": 1.0000000000000001e-11,
+      "S": 0.026983939285210718,
+      "bit_per_s": 26351.50320821359,
+      "fraction_of_1_round": 0.7498021148833289
+    },
+    {
+      "route": "exact",
+      "rounds": 1000,
+      "eps_round": 1e-12,
+      "S": 0.02267155549635739,
+      "bit_per_s": 22140.190914411512,
+      "fraction_of_1_round": 0.6299740033946931
+    },
+    {
+      "route": "exact",
+      "rounds": 10000,
+      "eps_round": 1e-13,
+      "S": 0.018467550369310262,
+      "bit_per_s": 18034.717157529554,
+      "fraction_of_1_round": 0.5131574073475799
+    },
+    {
+      "route": "exact",
+      "rounds": 100000,
+      "eps_round": 1e-14,
+      "S": 0.014358891959351628,
+      "bit_per_s": 14022.355429054323,
+      "fraction_of_1_round": 0.3989902083868035
+    },
+    {
+      "route": "bound",
+      "rounds": 1,
+      "eps_round": 1e-09,
+      "S": 0.023651508281035197,
+      "bit_per_s": 23097.176055698434,
+      "fraction_of_1_round": 1.0
+    },
+    {
+      "route": "bound",
+      "rounds": 10,
+      "eps_round": 1e-10,
+      "S": 0.018651882192856906,
+      "bit_per_s": 18214.72870396182,
+      "fraction_of_1_round": 0.7886128009778045
+    },
+    {
+      "route": "bound",
+      "rounds": 100,
+      "eps_round": 1.0000000000000001e-11,
+      "S": 0.01381467579174678,
+      "bit_per_s": 13490.894327877715,
+      "fraction_of_1_round": 0.5840928040442979
+    },
+    {
+      "route": "bound",
+      "rounds": 1000,
+      "eps_round": 1e-12,
+      "S": 0.009120753744043109,
+      "bit_per_s": 8906.986078167098,
+      "fraction_of_1_round": 0.38563095577953155
+    },
+    {
+      "route": "bound",
+      "rounds": 10000,
+      "eps_round": 1e-13,
+      "S": 0.004554498645526783,
+      "bit_per_s": 4447.752583522249,
+      "fraction_of_1_round": 0.19256694293694482
+    },
+    {
+      "route": "bound",
+      "rounds": 100000,
+      "eps_round": 1e-14,
+      "S": 0.000103574507336042,
+      "bit_per_s": 101.14697982035352,
+      "fraction_of_1_round": 0.0043791924855419275
+    }
+  ],
+  "allowance": [
+    {
+      "distance_km": 10.0,
+      "n_symbols": 10000000,
+      "xi_allowance": 0.11574270329717541
+    },
+    {
+      "distance_km": 10.0,
+      "n_symbols": 100000000,
+      "xi_allowance": 0.15287778492504728
+    },
+    {
+      "distance_km": 10.0,
+      "n_symbols": 1000000000,
+      "xi_allowance": 0.16472568703675639
+    },
+    {
+      "distance_km": 25.0,
+      "n_symbols": 10000000,
+      "xi_allowance": 0.059777433526702194
+    },
+    {
+      "distance_km": 25.0,
+      "n_symbols": 100000000,
+      "xi_allowance": 0.10312289274437354
+    },
+    {
+      "distance_km": 25.0,
+      "n_symbols": 1000000000,
+      "xi_allowance": 0.11702719275187702
+    },
+    {
+      "distance_km": 40.0,
+      "n_symbols": 10000000,
+      "xi_allowance": 0.01666899747401475
+    },
+    {
+      "distance_km": 40.0,
+      "n_symbols": 100000000,
+      "xi_allowance": 0.07109034982975569
+    },
+    {
+      "distance_km": 40.0,
+      "n_symbols": 1000000000,
+      "xi_allowance": 0.08879663715977223
+    }
+  ],
+  "L_min": [
+    {
+      "distance_km": 10.0,
+      "n_symbols": 10000000,
+      "xi_allowance": 0.11574270329717541,
+      "L_min_bound": 784,
+      "L_min_closed_form": 477.4559489073702
+    },
+    {
+      "distance_km": 10.0,
+      "n_symbols": 100000000,
+      "xi_allowance": 0.15287778492504728,
+      "L_min_bound": 592,
+      "L_min_closed_form": 361.4785644555937
+    },
+    {
+      "distance_km": 10.0,
+      "n_symbols": 1000000000,
+      "xi_allowance": 0.16472568703675639,
+      "L_min_bound": 560,
+      "L_min_closed_form": 335.4792031890332
+    },
+    {
+      "distance_km": 25.0,
+      "n_symbols": 10000000,
+      "xi_allowance": 0.059777433526702194,
+      "L_min_bound": 1520,
+      "L_min_closed_form": 924.463279394086
+    },
+    {
+      "distance_km": 25.0,
+      "n_symbols": 100000000,
+      "xi_allowance": 0.10312289274437354,
+      "L_min_bound": 880,
+      "L_min_closed_form": 535.8852991919414
+    },
+    {
+      "distance_km": 25.0,
+      "n_symbols": 1000000000,
+      "xi_allowance": 0.11702719275187702,
+      "L_min_bound": 784,
+      "L_min_closed_form": 472.21539654484053
+    },
+    {
+      "distance_km": 40.0,
+      "n_symbols": 10000000,
+      "xi_allowance": 0.01666899747401475,
+      "L_min_bound": null,
+      "L_min_closed_form": 3315.2589001231136
+    },
+    {
+      "distance_km": 40.0,
+      "n_symbols": 100000000,
+      "xi_allowance": 0.07109034982975569,
+      "L_min_bound": 1280,
+      "L_min_closed_form": 777.3494203389969
+    },
+    {
+      "distance_km": 40.0,
+      "n_symbols": 1000000000,
+      "xi_allowance": 0.08879663715977223,
+      "L_min_bound": 1024,
+      "L_min_closed_form": 622.3438634553675
+    }
+  ],
+  "floor": [
+    {
+      "L": 512,
+      "xi_bound": 0.1759315253121192,
+      "xi_allowance": 0.10312289274437354,
+      "fits": false
+    },
+    {
+      "L": 1024,
+      "xi_bound": 0.0879657626560596,
+      "xi_allowance": 0.10312289274437354,
+      "fits": true
+    },
+    {
+      "L": 1536,
+      "xi_bound": 0.0586438417707064,
+      "xi_allowance": 0.10312289274437354,
+      "fits": true
+    },
+    {
+      "L": 2048,
+      "xi_bound": 0.0439828813280298,
+      "xi_allowance": 0.10312289274437354,
+      "fits": true
+    }
+  ],
+  "k_zero": [
+    {
+      "L": 128,
+      "xi_bound_at_K0": 0.0,
+      "xi_exact_at_K0": 0.0
+    },
+    {
+      "L": 512,
+      "xi_bound_at_K0": 0.0,
+      "xi_exact_at_K0": 0.0
+    },
+    {
+      "L": 1024,
+      "xi_bound_at_K0": 0.0,
+      "xi_exact_at_K0": 0.0
+    },
+    {
+      "L": 4096,
+      "xi_bound_at_K0": 0.0,
+      "xi_exact_at_K0": 0.0
+    }
+  ],
+  "M_crit": [
+    {
+      "L": 1024,
+      "M_crit_exact": 13,
+      "M_crit_closed_form": 51.33579993838141,
+      "formula_overstatement": 3.948907687567801
+    },
+    {
+      "L": 1536,
+      "M_crit_exact": 39,
+      "M_crit_closed_form": 104.13472102350067,
+      "formula_overstatement": 2.6701210518846326
+    },
+    {
+      "L": 2048,
+      "M_crit_exact": 69,
+      "M_crit_closed_form": 156.93364210861992,
+      "formula_overstatement": 2.2744006102698537
+    },
+    {
+      "L": 4096,
+      "M_crit_exact": 214,
+      "M_crit_closed_form": 368.12932644909694,
+      "formula_overstatement": 1.7202304974256866
+    }
+  ],
+  "headline": {
+    "S": 0.024106699593531917,
+    "K_n": 2410669.959353192,
+    "u_n": 2410206.2330789147,
+    "auth_bits": 207.72627427729668,
+    "seed_bits": 256.0,
+    "messages": 667,
+    "gross_bit_per_s": 23541.698821808513,
+    "net_bit_per_s": 23537.170244911274,
+    "symbol_rate": 976562.5,
+    "round_seconds": 102.4,
+    "seed_fraction": 0.00010619454521625495,
+    "auth_fraction": 8.616952041540843e-05
+  },
+  "reach": [
+    {
+      "distance_km": 38.0,
+      "S": 0.002483303714301051,
+      "K_n": 248330.37143010512,
+      "u_n": 247866.64515582783,
+      "feasible": true
+    },
+    {
+      "distance_km": 38.5,
+      "S": 0.0020279345164607183,
+      "K_n": 202793.45164607183,
+      "u_n": 202329.72537179454,
+      "feasible": true
+    },
+    {
+      "distance_km": 39.0,
+      "S": 0.0015912593710200554,
+      "K_n": 159125.93710200556,
+      "u_n": 158662.21082772827,
+      "feasible": true
+    },
+    {
+      "distance_km": 39.5,
+      "S": 0.0011725661686878789,
+      "K_n": 117256.61686878788,
+      "u_n": 116792.89059451058,
+      "feasible": true
+    },
+    {
+      "distance_km": 40.0,
+      "S": 0.0007711704952592783,
+      "K_n": 77117.04952592783,
+      "u_n": 76653.32325165052,
+      "feasible": true
+    },
+    {
+      "distance_km": 40.5,
+      "S": 0.0003864144442098442,
+      "K_n": 38641.44442098442,
+      "u_n": 38177.71814670713,
+      "feasible": true
+    },
+    {
+      "distance_km": 41.0,
+      "S": 1.766548949263684e-05,
+      "K_n": 1766.548949263684,
+      "u_n": 1302.8226749863875,
+      "feasible": true
+    },
+    {
+      "distance_km": 41.5,
+      "S": 0.0,
+      "K_n": 0.0,
+      "u_n": -463.7262742772967,
+      "feasible": false
+    },
+    {
+      "distance_km": 42.0,
+      "S": 0.0,
+      "K_n": 0.0,
+      "u_n": -463.7262742772967,
+      "feasible": false
+    },
+    {
+      "distance_km": 42.5,
+      "S": 0.0,
+      "K_n": 0.0,
+      "u_n": -463.7262742772967,
+      "feasible": false
+    },
+    {
+      "distance_km": 43.0,
+      "S": 0.0,
+      "K_n": 0.0,
+      "u_n": -463.7262742772967,
+      "feasible": false
+    },
+    {
+      "distance_km": 43.5,
+      "S": 0.0,
+      "K_n": 0.0,
+      "u_n": -463.7262742772967,
+      "feasible": false
+    }
+  ],
+  "reach_km": 41.0,
+  "note": "the lower bound on L holds for K>=1 and scales with kappa_max; at K=0 the Laurent-Massart bound is identically zero",
+  "runtime_s": 0.9837003319998985
+}

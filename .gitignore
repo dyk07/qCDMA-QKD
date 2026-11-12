@@ -1,3 +1,6 @@
+/references/
+/docs/paper
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -218,3 +221,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# LaTeX build artifacts
+docs/paper/_build/
+docs/paper/_build_en/
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
