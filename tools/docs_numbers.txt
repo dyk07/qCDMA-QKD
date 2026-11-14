@@ -25,7 +25,6 @@
 1 km
 10 Mbit
 10 SNU
-10 bit
 10 kbit
 10 km
 100 km

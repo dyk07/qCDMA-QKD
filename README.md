@@ -13,7 +13,7 @@ CV-QKD.** See the claim boundary in [`docs/00_summary.md`](docs/00_summary.md).
 pip install numpy scipy matplotlib pytest
 
 python experiments/run_all.py    # E0-E13, about 2 minutes; generates JSON
-python -m pytest                 # 187 tests: physics, statistics, units, and docs
+python -m pytest                 # 360 tests: physics, statistics, units, and docs
 python tools/doc_check.py        # Check that docs/ numbers match results/data/
 ```
 
@@ -59,7 +59,14 @@ qCDMA-QKD/
 │   ├── 05_security.md          Security reductions, leakage, refresh constraints
 │   ├── 06_key_budget.md        Key budget and K_0
 │   ├── 07_results.md           E0-E13 results and interpretation
-│   └── 08_open_problems.md     Gaps, limitations, and future work
+│   ├── 08_open_problems.md     Gaps, limitations, and future work
+│   ├── 09_model_vs_bound.md    Model / exact / strict-bound classification
+│   ├── 10_parameters.md        Parameter table and the feasible region
+│   ├── 11_conclusions.md       Claim boundaries and key numbers for drafting
+│   └── paper/                  Manuscripts (REVTeX sources and compiled PDFs)
+│       ├── paper_en.tex        Regular Article (English, 21 pages)
+│       ├── paper.tex           Chinese version (15 pages)
+│       └── letter.tex          Companion Letter (5 pages)
 ├── src/qcdma_qkd/              Core library
 │   ├── config.py               Scenario parameters (chip_rate / L / seeds)
 │   ├── cvqkd.py                GG02 rate, Holevo information, finite blocklength, PE

@@ -1,5 +1,37 @@
+# ---------------------------------------------------------------------------
+# Repository-specific rules
+#
+# This repository is public. The rule of thumb is: everything needed to
+# reproduce the results is tracked (source, experiment scripts, JSON data,
+# figures, manuscript sources and compiled PDFs); third-party material and
+# referee correspondence are not.
+# ---------------------------------------------------------------------------
+
+# Third-party reference PDFs. These are copyrighted by their publishers and
+# are kept locally only; the bibliography in docs/paper/paper_en.tex gives the
+# full citations.
 /references/
-/docs/paper
+
+# LaTeX build artefacts. The manuscripts (paper_en.tex, paper.tex, letter.tex),
+# their compiled PDFs and the figure PNGs they include are tracked; only the
+# intermediate files are ignored.
+docs/paper/_b/
+docs/paper/_build/
+docs/paper/_build_en/
+docs/paper/*.aux
+docs/paper/*.bbl
+docs/paper/*.blg
+docs/paper/*.fdb_latexmk
+docs/paper/*.fls
+docs/paper/*.log
+docs/paper/*.synctex.gz
+docs/paper/*Notes.bib
+
+# Referee correspondence and the cover letter. Delete these three lines if the
+# review history is to be published as well.
+docs/paper/review_*.md
+docs/paper/audit_*.md
+docs/paper/justification.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
