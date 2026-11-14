@@ -13,6 +13,11 @@ at which of the two is wrong:
 
 * results changed and the doc is stale  -> update the doc;
 * the doc is right and the results moved for a bad reason -> fix the code.
+
+``docs/`` is not part of this repository: only code and its numerical output
+are published.  When the directory is absent there is no prose to check, so the
+assertions below skip instead of failing.  Keep the notes locally under
+``docs/`` and they re-activate.
 """
 
 from __future__ import annotations
@@ -27,6 +32,10 @@ sys.path.insert(0, str(TOOLS))
 
 import doc_check  # noqa: E402
 
+requires_docs = pytest.mark.skipif(
+    not doc_check.DOCS_PRESENT,
+    reason="docs/ is not published with this repository; nothing to check")
+
 
 def test_results_are_present():
     """The check is meaningless on a stale/absent results directory."""
@@ -37,6 +46,7 @@ def test_results_are_present():
         f"missing {missing}; run `python experiments/run_all.py` first")
 
 
+@requires_docs
 @pytest.mark.parametrize("claim", doc_check.build_claims(),
                          ids=lambda c: c.label)
 def test_doc_quotes_the_computed_value(claim):
@@ -50,6 +60,7 @@ def test_doc_quotes_the_computed_value(claim):
     assert res.ok, res.detail
 
 
+@requires_docs
 @pytest.mark.parametrize("item", doc_check.RETIRED,
                          ids=lambda r: r.pattern)
 def test_retired_values_do_not_reappear(item):
@@ -64,6 +75,7 @@ def test_retired_values_do_not_reappear(item):
     assert res.ok, res.detail
 
 
+@requires_docs
 def test_every_doc_number_render_is_unique_enough():
     """Guard the guard: a claim whose expected string is trivially common.
 

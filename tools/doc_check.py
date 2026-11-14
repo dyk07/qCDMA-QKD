@@ -67,6 +67,11 @@ DATA = ROOT / "results" / "data"
 DOCS = ROOT / "docs"
 AUDIT_BASELINE = ROOT / "tools" / "docs_numbers.txt"
 
+# ``docs/`` is not published: the notes and the manuscripts stay on the
+# author's disk.  When the directory is absent there is no prose to check, and
+# every consumer of this module degrades to a no-op rather than to a failure.
+DOCS_PRESENT = DOCS.is_dir()
+
 # A line that matches a RETIRED pattern is tolerated when it is explicitly
 # talking about the superseded value rather than asserting it.  The markers are
 # *per item* (see ``Retired.exempt``) because a global list would either be too
@@ -801,6 +806,8 @@ def _doc_text(name: str) -> str:
 
 def check_claims(claims: list[Claim]) -> list[Result]:
     """Each claim must hold on at least one *anchored* line."""
+    if not DOCS_PRESENT:
+        return [Result(True, "claims", "docs/ absent -- nothing to check")]
     out = []
     for c in claims:
         expected = c.expected()
@@ -829,6 +836,8 @@ def check_claims(claims: list[Claim]) -> list[Result]:
 
 
 def check_retired(retired: list[Retired]) -> list[Result]:
+    if not DOCS_PRESENT:
+        return [Result(True, "retired", "docs/ absent -- nothing to check")]
     out = []
     for r in retired:
         rx = re.compile(r.pattern)
@@ -941,6 +950,8 @@ def write_audit_baseline(fps: list[str]) -> None:
 
 def check_audit() -> list[Result]:
     """No unregistered "number + unit" may appear in the docs."""
+    if not DOCS_PRESENT:
+        return [Result(True, "audit", "docs/ absent -- nothing to check")]
     found = scan_docs()
     baseline = load_audit_baseline()
     if not baseline:
@@ -973,6 +984,12 @@ def check_audit() -> list[Result]:
 
 
 def main(argv: list[str]) -> int:
+    if not DOCS_PRESENT:
+        print(f"{DOCS} is absent -- this repository publishes no documentation, "
+              "so there is nothing to check.")
+        print("Put the research notes back in docs/ to enable the check.")
+        return 0
+
     if "--update" in argv:
         fps = sorted(scan_docs())
         write_audit_baseline(fps)
